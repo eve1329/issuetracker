@@ -8,22 +8,22 @@ export interface ClassificationRules {
 
 export interface GitlabIssuesSettings {
 	gitlabUrl: string;
-	apiBaseUrl: string;
+	apiBaseUrl?: string;
 	gitlabToken: string;
 	gitlabIssuesLevel: GitlabIssuesLevel;
-	orgName: string;
-	repoList: string[];
+	orgName?: string;
+	repoList?: string[];
 	gitlabAppId: string;
-	internalUserWhitelist: string[];
-	classificationRules: ClassificationRules;
+	internalUserWhitelist?: string[];
+	classificationRules?: ClassificationRules;
 	templateFile: string;
 	outputDir: string;
-	issuesFolder: string;
-	metaFolder: string;
-	reportsFolder: string;
-	issueFilter: string;
+	issuesFolder?: string;
+	metaFolder?: string;
+	reportsFolder?: string;
+	issueFilter?: string;
 	filter: string;
-	generateDailyReports: boolean;
+	generateDailyReports?: boolean;
 	showIcon: boolean;
 	purgeIssues: boolean;
 	refreshOnStartup: boolean;
