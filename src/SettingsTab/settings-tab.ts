@@ -21,27 +21,60 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 		containerEl.createEl('h2', {text: title});
 
 		settingInputs.forEach((setting) => {
-			const handleSetValue = () => {
+			const handleSetValue = (): string => {
 				if (setting.modifier === 'normalizePath') {
 					return normalizePath(this.plugin.settings[setting.value]);
 				}
-				return this.plugin.settings[setting.value];
+				if (setting.modifier === 'stringArray') {
+					return this.plugin.settings[setting.value].join('\n');
+				}
+				if (setting.modifier === 'json') {
+					return JSON.stringify(this.plugin.settings[setting.value], null, 2);
+				}
+				return String(this.plugin.settings[setting.value]);
 			};
 
-			new Setting(containerEl)
+			const saveValue = async (value: string) => {
+				if (setting.modifier === "normalizePath") {
+					this.plugin.settings[setting.value] = normalizePath(value) as never;
+				} else if (setting.modifier === 'stringArray') {
+					this.plugin.settings[setting.value] = value
+						.split('\n')
+						.map(item => item.trim())
+						.filter(Boolean) as never;
+				} else if (setting.modifier === 'json') {
+					try {
+						this.plugin.settings[setting.value] = JSON.parse(value) as never;
+					} catch (error) {
+						console.error(error);
+						return;
+					}
+				} else {
+					this.plugin.settings[setting.value] = value as never;
+				}
+				await this.plugin.saveSettings();
+			};
+
+			const uiSetting = new Setting(containerEl)
 				.setName(setting.title)
-				.setDesc(setting.description)
-				.addText(text => text
+				.setDesc(setting.description);
+
+			if (setting.inputType === 'textarea') {
+				uiSetting.addTextArea(text => text
 					.setPlaceholder(setting.placeholder ?? "")
 					.setValue(handleSetValue())
 					.onChange(async (value) => {
-						if (setting.modifier === "normalizePath") {
-							this.plugin.settings[setting.value] = normalizePath(value);
-						} else {
-							this.plugin.settings[setting.value] = value;
-						}
-						await this.plugin.saveSettings();
+						await saveValue(value);
 					}));
+				return;
+			}
+
+			uiSetting.addText(text => text
+				.setPlaceholder(setting.placeholder ?? "")
+				.setValue(handleSetValue())
+				.onChange(async (value) => {
+					await saveValue(value);
+				}));
 		});
 
 		dropdowns.forEach((dropwdown) => {

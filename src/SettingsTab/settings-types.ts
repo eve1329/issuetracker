@@ -1,14 +1,29 @@
 export type GitlabIssuesLevel = 'personal' | 'project' | 'group';
 export type GitlabRefreshInterval = "15" | "30" | "45" |"60" | "120" | "off";
+export type RequestKind = 'bug' | 'requirement' | 'other';
+
+export interface ClassificationRules {
+	titlePrefixes: Record<string, RequestKind>;
+}
 
 export interface GitlabIssuesSettings {
 	gitlabUrl: string;
+	apiBaseUrl: string;
 	gitlabToken: string;
 	gitlabIssuesLevel: GitlabIssuesLevel;
+	orgName: string;
+	repoList: string[];
 	gitlabAppId: string;
+	internalUserWhitelist: string[];
+	classificationRules: ClassificationRules;
 	templateFile: string;
 	outputDir: string;
+	issuesFolder: string;
+	metaFolder: string;
+	reportsFolder: string;
+	issueFilter: string;
 	filter: string;
+	generateDailyReports: boolean;
 	showIcon: boolean;
 	purgeIssues: boolean;
 	refreshOnStartup: boolean;
@@ -26,15 +41,31 @@ export interface Setting {
 	placeholder?: string;
 }
 export interface SettingInput extends Setting {
-	value: keyof Pick<GitlabIssuesSettings, "filter" | "gitlabUrl" | "gitlabToken" | "outputDir" | "templateFile">,
-	modifier?: string
+	value: keyof Pick<
+		GitlabIssuesSettings,
+		| "gitlabUrl"
+		| "apiBaseUrl"
+		| "gitlabToken"
+		| "templateFile"
+		| "outputDir"
+		| "orgName"
+		| "repoList"
+		| "internalUserWhitelist"
+		| "classificationRules"
+		| "issuesFolder"
+		| "metaFolder"
+		| "reportsFolder"
+		| "issueFilter"
+	>,
+	modifier?: 'normalizePath' | 'stringArray' | 'json';
+	inputType?: 'text' | 'textarea';
 }
 export interface DropdownInputs extends Setting {
 	value: keyof Pick<GitlabIssuesSettings, "gitlabIssuesLevel" | "intervalOfRefresh">
 	options: Record<string, string>
 }
 export interface SettingCheckboxInput extends Omit<Setting, "description"> {
-	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon'>
+	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports'>
 }
 
 export interface SettingsTab {

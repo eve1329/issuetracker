@@ -1,19 +1,34 @@
 import {GitlabIssuesSettings, SettingsTab} from "./settings-types";
 
 export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
-	gitlabUrl: 'https://gitlab.com',
+	gitlabUrl: 'https://gitcode.com',
+	apiBaseUrl: 'https://gitcode.com/api/v5',
 	gitlabToken: '',
 	gitlabIssuesLevel: 'personal',
+	orgName: 'CPF-KMP-CMP',
+	repoList: [],
 	gitlabAppId: '',
+	internalUserWhitelist: [],
+	classificationRules: {
+		titlePrefixes: {
+			'[BUG]': 'bug',
+			'[需求]': 'requirement',
+		},
+	},
 	templateFile: '',
-	outputDir: '/Gitlab Issues/',
-	filter: 'due_date=month',
+	outputDir: 'GitCode Issues',
+	issuesFolder: 'GitCode Issues/issues',
+	metaFolder: 'GitCode Issues/meta',
+	reportsFolder: 'GitCode Issues/reports',
+	issueFilter: '',
+	filter: '',
+	generateDailyReports: true,
 	showIcon: false,
 	purgeIssues: true,
 	refreshOnStartup: true,
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
-		return `${this.gitlabUrl}/api/v4`;
+		return this.apiBaseUrl || `${this.gitlabUrl}/api/v5`;
 	}
 };
 
@@ -22,9 +37,15 @@ export const settings: SettingsTab = {
 	settingInputs: [{
 		title: 'Gitlab instance URL',
 		description: 'Use your own Gitlab instance instead of the public hosted Gitlab.',
-		placeholder: 'https://gitlab.com',
+		placeholder: 'https://gitcode.com',
 		value: "gitlabUrl",
 	},
+		{
+			title: 'API Base URL',
+			description: 'Override the GitCode API base URL when needed.',
+			placeholder: 'https://gitcode.com/api/v5',
+			value: 'apiBaseUrl',
+		},
 		{
 			title: 'Personal Access Token',
 			description: 'Create a personal access token in your Gitlab account and enter it here.',
@@ -45,10 +66,61 @@ export const settings: SettingsTab = {
 			modifier: "normalizePath"
 		},
 		{
+			title: 'Organization Name',
+			description: 'The GitCode organization that owns the repositories.',
+			placeholder: 'CPF-KMP-CMP',
+			value: 'orgName'
+		},
+		{
+			title: 'Repository List',
+			description: 'One repository per line.',
+			placeholder: 'repo-a\nrepo-b',
+			value: 'repoList',
+			modifier: 'stringArray',
+			inputType: 'textarea'
+		},
+		{
+			title: 'Internal User Whitelist',
+			description: 'One internal username per line.',
+			placeholder: 'alice\nbob',
+			value: 'internalUserWhitelist',
+			modifier: 'stringArray',
+			inputType: 'textarea'
+		},
+		{
+			title: 'Classification Rules',
+			description: 'JSON object that controls issue classification.',
+			placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  }\n}',
+			value: 'classificationRules',
+			modifier: 'json',
+			inputType: 'textarea'
+		},
+		{
+			title: 'Issues Folder',
+			description: 'Path to the folder that stores issue notes.',
+			placeholder: 'GitCode Issues/issues',
+			value: 'issuesFolder',
+			modifier: 'normalizePath'
+		},
+		{
+			title: 'Meta Folder',
+			description: 'Path to the folder that stores sync metadata.',
+			placeholder: 'GitCode Issues/meta',
+			value: 'metaFolder',
+			modifier: 'normalizePath'
+		},
+		{
+			title: 'Reports Folder',
+			description: 'Path to the folder that stores generated reports.',
+			placeholder: 'GitCode Issues/reports',
+			value: 'reportsFolder',
+			modifier: 'normalizePath'
+		},
+		{
 			title: "Issues Filter",
 			description: 'The query string used to filter the issues.',
-			placeholder: 'due_date=month',
-			value: 'filter'
+			placeholder: '',
+			value: 'issueFilter'
 		}
 	],
 	dropdowns: [{
@@ -75,6 +147,10 @@ export const settings: SettingsTab = {
 		{
 			title: 'Should refresh Gitlab issues on Startup?',
 			value: 'refreshOnStartup'
+		},
+		{
+			title: 'Generate daily reports?',
+			value: 'generateDailyReports'
 		}
 	],
 	getGitlabIssuesLevel: (currentLevel) => {
