@@ -4,7 +4,7 @@ import GitlabLoader from "./GitlabLoader/gitlab-loader";
 import gitlabIcon from './assets/gitlab-icon.svg';
 import {GitlabIssuesSettingTab} from "./SettingsTab/settings-tab";
 import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
-import {DEFAULT_SETTINGS} from "./SettingsTab/settings";
+import {normalizeSettings} from "./SettingsTab/settings";
 import {logger} from "./utils/utils";
 
 export default class GitlabIssuesPlugin extends Plugin {
@@ -47,7 +47,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = normalizeSettings(await this.loadData());
 	}
 
 	async saveSettings() {

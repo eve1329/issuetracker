@@ -33,6 +33,21 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	}
 };
 
+export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): GitlabIssuesSettings {
+	const rawData = loadedData ?? {};
+	const mergedSettings = Object.assign({}, DEFAULT_SETTINGS, rawData);
+	const hasExplicitIssueFilter = Object.prototype.hasOwnProperty.call(rawData, 'issueFilter');
+	const canonicalFilter = hasExplicitIssueFilter
+		? rawData.issueFilter ?? ''
+		: rawData.filter ?? DEFAULT_SETTINGS.issueFilter;
+
+	return {
+		...mergedSettings,
+		issueFilter: canonicalFilter,
+		filter: canonicalFilter,
+	};
+}
+
 export const settings: SettingsTab = {
 	title: 'GitLab Issues Configuration',
 	settingInputs: [{

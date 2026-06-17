@@ -1,5 +1,5 @@
 import {GitlabIssuesSettings} from "../../src/SettingsTab/settings-types";
-import {DEFAULT_SETTINGS, settings} from "../../src/SettingsTab/settings";
+import {DEFAULT_SETTINGS, normalizeSettings, settings} from "../../src/SettingsTab/settings";
 
 describe('DEFAULT_SETTINGS', () => {
 	it('should have the correct default values', () => {
@@ -60,6 +60,35 @@ describe('DEFAULT_SETTINGS', () => {
 });
 
 describe('settings', () => {
+	it('migrates legacy filter into issueFilter when issueFilter is missing', () => {
+		const normalized = normalizeSettings({
+			filter: 'due_date=month',
+		});
+
+		expect(normalized.issueFilter).toBe('due_date=month');
+		expect(normalized.filter).toBe('due_date=month');
+	});
+
+	it('prefers explicit issueFilter over legacy filter', () => {
+		const normalized = normalizeSettings({
+			issueFilter: 'state=opened',
+			filter: 'due_date=month',
+		});
+
+		expect(normalized.issueFilter).toBe('state=opened');
+		expect(normalized.filter).toBe('state=opened');
+	});
+
+	it('keeps explicit empty issueFilter and clears legacy filter', () => {
+		const normalized = normalizeSettings({
+			issueFilter: '',
+			filter: 'due_date=month',
+		});
+
+		expect(normalized.issueFilter).toBe('');
+		expect(normalized.filter).toBe('');
+	});
+
 	it('should have the correct title', () => {
 		expect(settings.title).toBe('GitLab Issues Configuration');
 	});

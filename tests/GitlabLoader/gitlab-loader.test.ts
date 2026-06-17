@@ -1,6 +1,7 @@
 import {App} from 'obsidian';
 import * as Filesystem from '../../src/filesystem';
 import {GitlabIssuesSettings} from '../../src/SettingsTab/settings-types';
+import {normalizeSettings} from '../../src/SettingsTab/settings';
 import GitlabLoader from "../../src/GitlabLoader/gitlab-loader";
 import GitlabApi from "../../src/GitlabLoader/gitlab-api";
 import {Issue} from "../../src/GitlabLoader/issue-types";
@@ -15,7 +16,7 @@ const mockFileSystem = jest.spyOn(Filesystem, 'default').mockReturnValue({
 
 const mockLoad = jest.spyOn(GitlabApi, "load");
 
-const mockSettings: GitlabIssuesSettings = {
+const mockSettings: GitlabIssuesSettings = normalizeSettings({
 	gitlabUrl: 'https://gitlab.com',
 	apiBaseUrl: 'https://gitcode.com/api/v5',
 	gitlabToken: 'test-token',
@@ -46,7 +47,7 @@ const mockSettings: GitlabIssuesSettings = {
 	gitlabApiUrl(): string {
 		return `${this.gitlabUrl}/api/v4`;
 	}
-};
+});
 
 const mockApp = {} as App;
 
@@ -55,7 +56,7 @@ describe('GitlabLoader', () => {
 
 	beforeEach(() => {
 		mockSettings.gitlabIssuesLevel = 'project';
-		mockSettings.issueFilter = '';
+		mockSettings.issueFilter = 'due_date=month';
 		mockSettings.filter = 'due_date=month';
 		gitlabLoader = new GitlabLoader(mockApp, mockSettings);
 	});
@@ -69,28 +70,19 @@ describe('GitlabLoader', () => {
 	});
 
 	it('should construct correct URL for project level', () => {
-		const expectedUrl = `${mockSettings.gitlabApiUrl()}/projects/${mockSettings.gitlabAppId}/issues?${mockSettings.filter}`;
-		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
-	});
-
-	it('uses issueFilter instead of legacy filter when provided', () => {
-		mockSettings.gitlabIssuesLevel = 'project';
-		mockSettings.issueFilter = 'state=opened&labels=bug';
-		mockSettings.filter = 'due_date=month';
-
 		const expectedUrl = `${mockSettings.gitlabApiUrl()}/projects/${mockSettings.gitlabAppId}/issues?${mockSettings.issueFilter}`;
 		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
 	});
 
 	it('should construct correct URL for group level', () => {
 		mockSettings.gitlabIssuesLevel = 'group';
-		const expectedUrl = `${mockSettings.gitlabApiUrl()}/groups/${mockSettings.gitlabAppId}/issues?${mockSettings.filter}`;
+		const expectedUrl = `${mockSettings.gitlabApiUrl()}/groups/${mockSettings.gitlabAppId}/issues?${mockSettings.issueFilter}`;
 		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
 	});
 
 	it('should construct correct URL for personal level', () => {
 		mockSettings.gitlabIssuesLevel = 'personal';
-		const expectedUrl = `${mockSettings.gitlabApiUrl()}/issues?${mockSettings.filter}`;
+		const expectedUrl = `${mockSettings.gitlabApiUrl()}/issues?${mockSettings.issueFilter}`;
 		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
 	});
 

@@ -17,7 +17,7 @@ export default class GitlabLoader {
 	}
 
 	getUrl() {
-		const filter = this.settings.issueFilter || this.settings.filter;
+		const filter = this.settings.issueFilter;
 
 		switch (this.settings.gitlabIssuesLevel) {
 			case "project":
