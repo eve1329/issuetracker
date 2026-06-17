@@ -17,12 +17,28 @@ const mockLoad = jest.spyOn(GitlabApi, "load");
 
 const mockSettings: GitlabIssuesSettings = {
 	gitlabUrl: 'https://gitlab.com',
+	apiBaseUrl: 'https://gitcode.com/api/v5',
 	gitlabToken: 'test-token',
 	gitlabIssuesLevel: 'project',
+	orgName: 'CPF-KMP-CMP',
+	repoList: [],
 	gitlabAppId: '12345',
+	internalUserWhitelist: [],
+	classificationRules: {
+		titlePrefixes: {
+			'[BUG]': 'bug',
+			'[需求]': 'requirement',
+		},
+		labels: {},
+	},
 	templateFile: 'template.md',
 	outputDir: '/Gitlab Issues/',
+	issuesFolder: 'GitCode Issues/issues',
+	metaFolder: 'GitCode Issues/meta',
+	reportsFolder: 'GitCode Issues/reports',
+	issueFilter: '',
 	filter: 'due_date=month',
+	generateDailyReports: true,
 	showIcon: false,
 	purgeIssues: true,
 	refreshOnStartup: true,

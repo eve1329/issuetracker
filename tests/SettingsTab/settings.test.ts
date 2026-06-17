@@ -17,6 +17,7 @@ describe('DEFAULT_SETTINGS', () => {
 					'[BUG]': 'bug',
 					'[需求]': 'requirement',
 				},
+				labels: {},
 			},
 			templateFile: '',
 			outputDir: 'GitCode Issues',
@@ -54,6 +55,7 @@ describe('DEFAULT_SETTINGS', () => {
 		expect(DEFAULT_SETTINGS.metaFolder).toBe('GitCode Issues/meta');
 		expect(DEFAULT_SETTINGS.reportsFolder).toBe('GitCode Issues/reports');
 		expect(DEFAULT_SETTINGS.generateDailyReports).toBe(true);
+		expect(DEFAULT_SETTINGS.classificationRules.labels).toEqual({});
 	});
 });
 
@@ -120,7 +122,7 @@ describe('settings', () => {
 			{
 				title: 'Classification Rules',
 				description: 'JSON object that controls issue classification.',
-				placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  }\n}',
+				placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  },\n  "labels": {}\n}',
 				value: 'classificationRules',
 				modifier: 'json',
 				inputType: 'textarea',

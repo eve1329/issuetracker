@@ -33,6 +33,10 @@ export default class GitlabApi {
 
 			result.push(...pageData);
 
+			if (pageData.length < 100) {
+				break;
+			}
+
 			page += 1;
 		}
 

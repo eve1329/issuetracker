@@ -1,29 +1,30 @@
 export type GitlabIssuesLevel = 'personal' | 'project' | 'group';
 export type GitlabRefreshInterval = "15" | "30" | "45" |"60" | "120" | "off";
-export type RequestKind = 'bug' | 'requirement' | 'other';
+export type RequestKind = 'bug' | 'requirement' | 'unknown';
 
 export interface ClassificationRules {
-	titlePrefixes: Record<string, RequestKind>;
+	titlePrefixes: Record<string, Exclude<RequestKind, 'unknown'>>;
+	labels: Record<string, Exclude<RequestKind, 'unknown'>>;
 }
 
 export interface GitlabIssuesSettings {
 	gitlabUrl: string;
-	apiBaseUrl?: string;
+	apiBaseUrl: string;
 	gitlabToken: string;
 	gitlabIssuesLevel: GitlabIssuesLevel;
-	orgName?: string;
-	repoList?: string[];
+	orgName: string;
+	repoList: string[];
 	gitlabAppId: string;
-	internalUserWhitelist?: string[];
-	classificationRules?: ClassificationRules;
+	internalUserWhitelist: string[];
+	classificationRules: ClassificationRules;
 	templateFile: string;
 	outputDir: string;
-	issuesFolder?: string;
-	metaFolder?: string;
-	reportsFolder?: string;
-	issueFilter?: string;
+	issuesFolder: string;
+	metaFolder: string;
+	reportsFolder: string;
+	issueFilter: string;
 	filter: string;
-	generateDailyReports?: boolean;
+	generateDailyReports: boolean;
 	showIcon: boolean;
 	purgeIssues: boolean;
 	refreshOnStartup: boolean;

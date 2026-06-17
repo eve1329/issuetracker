@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 			'[BUG]': 'bug',
 			'[需求]': 'requirement',
 		},
+		labels: {},
 	},
 	templateFile: '',
 	outputDir: 'GitCode Issues',
@@ -90,7 +91,7 @@ export const settings: SettingsTab = {
 		{
 			title: 'Classification Rules',
 			description: 'JSON object that controls issue classification.',
-			placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  }\n}',
+			placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  },\n  "labels": {}\n}',
 			value: 'classificationRules',
 			modifier: 'json',
 			inputType: 'textarea'

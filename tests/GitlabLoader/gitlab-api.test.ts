@@ -44,21 +44,18 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenCalledWith(mockParams);
 	});
 
-	it('loads all pages until an empty page is returned', async () => {
+	it('loads pages until a partial page is returned', async () => {
+		const pageOne = Array.from({length: 100}, (_, index) => ({id: index + 1}));
+
 		mockRequestUrl
 			.mockResolvedValueOnce({
 				status: 200,
-				json: Promise.resolve([{id: 1}, {id: 2}]),
+				json: Promise.resolve(pageOne),
 				text: '',
 			} as RequestUrlResponse)
 			.mockResolvedValueOnce({
 				status: 200,
-				json: Promise.resolve([{id: 3}]),
-				text: '',
-			} as RequestUrlResponse)
-			.mockResolvedValueOnce({
-				status: 200,
-				json: Promise.resolve([]),
+				json: Promise.resolve([{id: 101}]),
 				text: '',
 			} as RequestUrlResponse);
 
@@ -67,17 +64,16 @@ describe('GitlabApi', () => {
 			mockToken,
 		);
 
-		expect(data).toEqual([{id: 1}, {id: 2}, {id: 3}]);
+		expect(data).toHaveLength(101);
+		expect(data[0]).toEqual({id: 1});
+		expect(data[100]).toEqual({id: 101});
+		expect(mockRequestUrl).toHaveBeenCalledTimes(2);
 		expect(mockRequestUrl).toHaveBeenNthCalledWith(1, {
 			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=1',
 			headers: {'PRIVATE-TOKEN': mockToken},
 		});
 		expect(mockRequestUrl).toHaveBeenNthCalledWith(2, {
 			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=2',
-			headers: {'PRIVATE-TOKEN': mockToken},
-		});
-		expect(mockRequestUrl).toHaveBeenNthCalledWith(3, {
-			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=3',
 			headers: {'PRIVATE-TOKEN': mockToken},
 		});
 	});
