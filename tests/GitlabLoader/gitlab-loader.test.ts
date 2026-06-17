@@ -54,6 +54,9 @@ describe('GitlabLoader', () => {
 	let gitlabLoader: GitlabLoader;
 
 	beforeEach(() => {
+		mockSettings.gitlabIssuesLevel = 'project';
+		mockSettings.issueFilter = '';
+		mockSettings.filter = 'due_date=month';
 		gitlabLoader = new GitlabLoader(mockApp, mockSettings);
 	});
 
@@ -67,6 +70,15 @@ describe('GitlabLoader', () => {
 
 	it('should construct correct URL for project level', () => {
 		const expectedUrl = `${mockSettings.gitlabApiUrl()}/projects/${mockSettings.gitlabAppId}/issues?${mockSettings.filter}`;
+		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
+	});
+
+	it('uses issueFilter instead of legacy filter when provided', () => {
+		mockSettings.gitlabIssuesLevel = 'project';
+		mockSettings.issueFilter = 'state=opened&labels=bug';
+		mockSettings.filter = 'due_date=month';
+
+		const expectedUrl = `${mockSettings.gitlabApiUrl()}/projects/${mockSettings.gitlabAppId}/issues?${mockSettings.issueFilter}`;
 		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
 	});
 

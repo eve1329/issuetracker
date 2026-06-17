@@ -17,14 +17,16 @@ export default class GitlabLoader {
 	}
 
 	getUrl() {
+		const filter = this.settings.issueFilter || this.settings.filter;
+
 		switch (this.settings.gitlabIssuesLevel) {
 			case "project":
-				return `${this.settings.gitlabApiUrl()}/projects/${this.settings.gitlabAppId}/issues?${this.settings.filter}`;
+				return `${this.settings.gitlabApiUrl()}/projects/${this.settings.gitlabAppId}/issues?${filter}`;
 			case "group":
-				return `${this.settings.gitlabApiUrl()}/groups/${this.settings.gitlabAppId}/issues?${this.settings.filter}`;
+				return `${this.settings.gitlabApiUrl()}/groups/${this.settings.gitlabAppId}/issues?${filter}`;
 			case "personal":
 			default:
-				return `${this.settings.gitlabApiUrl()}/issues?${this.settings.filter}`;
+				return `${this.settings.gitlabApiUrl()}/issues?${filter}`;
 		}
 	}
 

@@ -77,4 +77,40 @@ describe('GitlabApi', () => {
 			headers: {'PRIVATE-TOKEN': mockToken},
 		});
 	});
+
+	it('loads pages until an empty page is returned after full pages', async () => {
+		const pageOne = Array.from({length: 100}, (_, index) => ({id: index + 1}));
+		const pageTwo = Array.from({length: 100}, (_, index) => ({id: index + 101}));
+
+		mockRequestUrl
+			.mockResolvedValueOnce({
+				status: 200,
+				json: Promise.resolve(pageOne),
+				text: '',
+			} as RequestUrlResponse)
+			.mockResolvedValueOnce({
+				status: 200,
+				json: Promise.resolve(pageTwo),
+				text: '',
+			} as RequestUrlResponse)
+			.mockResolvedValueOnce({
+				status: 200,
+				json: Promise.resolve([]),
+				text: '',
+			} as RequestUrlResponse);
+
+		const data = await GitlabApi.loadAllPages<{id: number}>(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues',
+			mockToken,
+		);
+
+		expect(data).toHaveLength(200);
+		expect(data[0]).toEqual({id: 1});
+		expect(data[199]).toEqual({id: 200});
+		expect(mockRequestUrl).toHaveBeenCalledTimes(3);
+		expect(mockRequestUrl).toHaveBeenNthCalledWith(3, {
+			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=3',
+			headers: {'PRIVATE-TOKEN': mockToken},
+		});
+	});
 });
