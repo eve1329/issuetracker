@@ -64,6 +64,7 @@ export default class SyncService {
 		const normalizedNotes: NormalizedIssueNote[] = [];
 		const failedRepos: string[] = [];
 		const failedRepoSet = new Set<string>();
+		let issueStorageFailed = false;
 
 		for (const repoName of this.settings.repoList) {
 			try {
@@ -80,12 +81,20 @@ export default class SyncService {
 		}
 
 		if (this.settings.purgeIssues) {
-			const successfulRepos = this.settings.repoList.filter((repoName) => !failedRepoSet.has(repoName));
-			await this.fs.purgeIssueNotes(successfulRepos);
+			try {
+				const successfulRepos = this.settings.repoList.filter((repoName) => !failedRepoSet.has(repoName));
+				await this.fs.purgeIssueNotes(successfulRepos);
+			} catch (error) {
+				issueStorageFailed = true;
+				const message = `Failed to purge issue notes: ${this.getErrorMessage(error)}`;
+				warningMessages.push(message);
+				logger(message);
+			}
 		}
 
 		const issueWriteFailures = await this.fs.writeIssueNotes(normalizedNotes);
 		if (issueWriteFailures.length > 0) {
+			issueStorageFailed = true;
 			for (const failure of issueWriteFailures) {
 				const message = `Failed to persist issue notes: ${failure.path} (${failure.message})`;
 				warningMessages.push(message);
@@ -93,7 +102,7 @@ export default class SyncService {
 			}
 		}
 
-		let repositorySyncStatus: NonNullable<SyncState['repositorySyncStatus']> = failedRepos.length > 0 || issueWriteFailures.length > 0
+		let repositorySyncStatus: NonNullable<SyncState['repositorySyncStatus']> = failedRepos.length > 0 || issueStorageFailed
 			? 'degraded'
 			: 'success';
 		let reportWriteFailed = false;
@@ -101,13 +110,10 @@ export default class SyncService {
 		if (this.settings.generateDailyReports) {
 			try {
 				const persistedNotes = await this.fs.readIssueNotes();
-				const reportNotes = failedRepos.length > 0
-					? this.mergePersistedNotesForFailedRepos(persistedNotes, normalizedNotes, failedRepoSet)
-					: normalizedNotes;
 				const provisionalStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded' || repositorySyncStatus === 'degraded'
 					? 'degraded'
 					: 'success';
-				const report = buildDailyReport(reportDate, reportNotes);
+				const report = buildDailyReport(reportDate, persistedNotes);
 				report.syncStatus = provisionalStatus;
 
 				await this.fs.upsertTextFile(
@@ -239,26 +245,5 @@ export default class SyncService {
 
 	private getErrorMessage(error: unknown) {
 		return error instanceof Error ? error.message : String(error);
-	}
-
-	private mergePersistedNotesForFailedRepos(
-		persistedNotes: NormalizedIssueNote[],
-		currentNotes: NormalizedIssueNote[],
-		failedRepoSet: Set<string>,
-	) {
-		if (failedRepoSet.size === 0) {
-			return currentNotes;
-		}
-
-		const currentKeys = new Set(currentNotes.map((note) => this.buildIssueKey(note)));
-		const staleNotes = persistedNotes.filter((note) => {
-			return failedRepoSet.has(note.sourceRepo) && !currentKeys.has(this.buildIssueKey(note));
-		});
-
-		return [...currentNotes, ...staleNotes];
-	}
-
-	private buildIssueKey(note: NormalizedIssueNote) {
-		return `${note.sourceRepo}#${note.iid}`;
 	}
 }

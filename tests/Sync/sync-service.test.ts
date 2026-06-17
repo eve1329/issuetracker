@@ -385,6 +385,53 @@ describe('SyncService', () => {
 		);
 	});
 
+	it('uses persisted issue notes when generating the daily report', async () => {
+		const settings = makeSettings({repoList: ['repo-a']});
+		mockLoadRepoIssues.mockResolvedValueOnce([
+			makeIssue({
+				title: '[BUG] 当前同步结果',
+			}),
+		]);
+		mockReadIssueNotes.mockResolvedValueOnce([
+			{
+				id: 222,
+				iid: 15,
+				title: '[需求] 持久化日报条目',
+				state: 'opened',
+				createdAt: '2026-06-17T07:00:00+08:00',
+				updatedAt: '2026-06-17T07:00:00+08:00',
+				webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/15',
+				projectId: 1001,
+				projectPath: 'CPF-KMP-CMP/repo-a',
+				sourceScope: 'project',
+				sourceRepo: 'repo-a',
+				authorUsername: 'partner_a',
+				authorName: 'Partner A',
+				isInternalAuthor: false,
+				internalMatchedBy: 'none',
+				labels: [],
+				issueTypeRaw: 'issue',
+				requestKind: 'requirement',
+				requestKindMatchedBy: 'title-prefix',
+				referencesFull: 'CPF-KMP-CMP/repo-a#15',
+			},
+		]);
+		mockReadJson.mockResolvedValueOnce({
+			syncStatus: 'success',
+			failedRepos: [],
+			lastSuccessfulSyncAt: '2026-06-16T12:00:00.000Z',
+		});
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockReadIssueNotes).toHaveBeenCalledWith();
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			1,
+			'GitCode Issues/reports/daily/2026-06-17.md',
+			expect.stringContaining('- repo-a #15: [需求] 持久化日报条目'),
+		);
+	});
+
 	it('preserves the previous lastSuccessfulSyncAt value on degraded syncs', async () => {
 		const settings = makeSettings({repoList: ['repo-a', 'repo-b']});
 		mockLoadRepoIssues
@@ -414,6 +461,31 @@ describe('SyncService', () => {
 		await new SyncService(mockApp, settings).run();
 
 		expect(mockPurgeIssueNotes).toHaveBeenCalled();
+	});
+
+	it('marks sync degraded when purging issue notes fails', async () => {
+		const settings = makeSettings({repoList: ['repo-a'], purgeIssues: true});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockPurgeIssueNotes.mockRejectedValueOnce(new Error('purge failed'));
+		mockReadJson.mockResolvedValueOnce({
+			syncStatus: 'success',
+			failedRepos: [],
+			lastSuccessfulSyncAt: '2026-06-16T12:00:00.000Z',
+		});
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				syncStatus: 'degraded',
+				repositorySyncStatus: 'degraded',
+				lastSuccessfulSyncAt: '2026-06-16T12:00:00.000Z',
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to purge issue notes: purge failed'),
+				]),
+			}),
+		);
 	});
 
 	it('falls back to the issue URL when references is only a short string', async () => {
