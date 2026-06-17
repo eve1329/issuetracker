@@ -2,6 +2,8 @@
 import * as Utils from '../../src/utils/utils';
 import { Issue } from '../../src/GitlabLoader/issue-types';
 import {GitlabIssue} from "../../src/GitlabLoader/issue";
+import {classifyIssue} from "../../src/Classification/classification";
+import {DEFAULT_SETTINGS} from "../../src/SettingsTab/settings";
 
 
 
@@ -48,6 +50,10 @@ const mockIssue: Issue = {
 };
 
 describe('GitlabIssue', () => {
+	afterEach(() => {
+		jest.restoreAllMocks();
+	});
+
 	it('should correctly assign properties from the issue object', () => {
 		const gitlabIssue = new GitlabIssue(mockIssue);
 
@@ -90,5 +96,41 @@ describe('GitlabIssue', () => {
 		const gitlabIssue = new GitlabIssue(mockIssue);
 		expect(gitlabIssue.filename).toEqual(`sanitized-Test`);
 		expect(mockSanitizeFileName).toHaveBeenCalledWith(mockIssue.title);
+	});
+
+	it('classifies [BUG] titles using title prefixes before writing notes', () => {
+		const result = classifyIssue(
+			{
+				title: '[BUG] 登录按钮点击无响应',
+				labels: ['enhancement'],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+
+		expect(result).toEqual({
+			requestKind: 'bug',
+			requestKindMatchedBy: 'title-prefix',
+		});
+	});
+
+	it('uses org, repo, and iid in the output filename when repository context is provided', () => {
+		const mockSanitizeFileName = jest.spyOn(Utils, "sanitizeFileName");
+		const gitlabIssue = new GitlabIssue(
+			{
+				...mockIssue,
+				iid: 78,
+				title: '[BUG] 登录按钮点击无响应',
+				references: {
+					full: 'CPF-KMP-CMP/repo-a#78',
+					short: '#78',
+					relative: '#78',
+				},
+			},
+			'CPF-KMP-CMP',
+			'repo-a',
+		);
+
+		expect(gitlabIssue.filename).toBe('CPF-KMP-CMP__repo-a__78');
+		expect(mockSanitizeFileName).not.toHaveBeenCalled();
 	});
 });

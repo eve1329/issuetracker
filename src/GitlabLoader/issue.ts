@@ -3,6 +3,9 @@ import {Assignee, Epic, Issue, ObsidianIssue, References, ShortIssue, TimeStats}
 
 export class GitlabIssue implements ObsidianIssue {
 
+	private readonly orgName?: string;
+	private readonly repoName?: string;
+
 	id: number;
 	title: string;
 	description: string;
@@ -11,11 +14,19 @@ export class GitlabIssue implements ObsidianIssue {
 	references: string | References;
 
 	get filename() {
+		if (this.orgName && this.repoName) {
+			return `${this.orgName}__${this.repoName}__${this.iid}`;
+		}
+
 		return sanitizeFileName(this.title);
 	}
 
-	constructor(issue: Issue) {
+	constructor(issue: Issue, orgName?: string, repoName?: string) {
 		Object.assign(this, issue);
+		const resolvedContext = this.resolveRepositoryContext(issue, orgName, repoName);
+
+		this.orgName = resolvedContext.orgName;
+		this.repoName = resolvedContext.repoName;
 	}
 
 	_links: {
@@ -50,4 +61,59 @@ export class GitlabIssue implements ObsidianIssue {
 	updated_at: string;
 	upvotes: number;
 	user_notes_count: number;
+
+	private resolveRepositoryContext(issue: Issue, orgName?: string, repoName?: string) {
+		const referenceContext = this.parseProjectPath(
+			typeof issue.references === 'string' ? undefined : issue.references.full,
+		);
+		const urlContext = this.parseProjectUrl(issue.web_url);
+
+		return {
+			orgName: this.pickProvidedValue(orgName, referenceContext?.orgName, urlContext?.orgName),
+			repoName: this.pickProvidedValue(repoName, referenceContext?.repoName, urlContext?.repoName),
+		};
+	}
+
+	private pickProvidedValue(...values: Array<string | undefined>) {
+		return values.find((value) => Boolean(value?.trim()));
+	}
+
+	private parseProjectPath(referenceFull?: string) {
+		if (!referenceFull) {
+			return;
+		}
+
+		const [projectPath] = referenceFull.split('#');
+		const pathSegments = projectPath.split('/').filter(Boolean);
+
+		if (pathSegments.length < 2) {
+			return;
+		}
+
+		return {
+			orgName: pathSegments.slice(0, -1).join('/'),
+			repoName: pathSegments[pathSegments.length - 1],
+		};
+	}
+
+	private parseProjectUrl(webUrl: string) {
+		try {
+			const url = new URL(webUrl);
+			const pathSegments = url.pathname.split('/').filter(Boolean);
+			const issuesSegmentIndex = pathSegments.indexOf('issues');
+
+			if (issuesSegmentIndex < 2) {
+				return;
+			}
+
+			const projectSegments = pathSegments.slice(0, issuesSegmentIndex);
+
+			return {
+				orgName: projectSegments.slice(0, -1).join('/'),
+				repoName: projectSegments[projectSegments.length - 1],
+			};
+		} catch (error) {
+			return;
+		}
+	}
 }
