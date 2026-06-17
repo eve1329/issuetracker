@@ -22,16 +22,18 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 
 		settingInputs.forEach((setting) => {
 			const handleSetValue = (): string => {
+				const currentValue = this.plugin.settings[setting.value];
+
 				if (setting.modifier === 'normalizePath') {
-					return normalizePath(this.plugin.settings[setting.value]);
+					return normalizePath(currentValue as string);
 				}
 				if (setting.modifier === 'stringArray') {
-					return this.plugin.settings[setting.value].join('\n');
+					return (currentValue as string[]).join('\n');
 				}
 				if (setting.modifier === 'json') {
-					return JSON.stringify(this.plugin.settings[setting.value], null, 2);
+					return JSON.stringify(currentValue, null, 2);
 				}
-				return String(this.plugin.settings[setting.value]);
+				return String(currentValue);
 			};
 
 			const saveValue = async (value: string) => {

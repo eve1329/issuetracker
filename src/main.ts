@@ -1,10 +1,10 @@
 import {addIcon, Notice, Plugin} from 'obsidian';
 import Filesystem from "./filesystem";
-import GitlabLoader from "./GitlabLoader/gitlab-loader";
 import gitlabIcon from './assets/gitlab-icon.svg';
 import {GitlabIssuesSettingTab} from "./SettingsTab/settings-tab";
 import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
+import SyncService from "./Sync/sync-service";
 import {logger} from "./utils/utils";
 
 export default class GitlabIssuesPlugin extends Plugin {
@@ -90,13 +90,13 @@ export default class GitlabIssuesPlugin extends Plugin {
 	}
 
 	private createOutputFolder() {
-		const fs = new Filesystem(app.vault, this.settings);
+		const fs = new Filesystem(this.app.vault, this.settings);
 		fs.createOutputDirectory();
 	}
 
 	private fetchFromGitlab() {
-		new Notice('Updating issues from Gitlab');
-		const loader = new GitlabLoader(this.app, this.settings);
-		loader.loadIssues();
+		new Notice('Updating issues from GitCode');
+		void new SyncService(this.app, this.settings).run()
+			.catch((error) => logger(error instanceof Error ? error.message : String(error)));
 	}
 }

@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	filter: '',
 	generateDailyReports: true,
 	showIcon: false,
-	purgeIssues: true,
+		purgeIssues: false,
 	refreshOnStartup: true,
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {

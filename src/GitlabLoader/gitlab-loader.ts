@@ -30,6 +30,23 @@ export default class GitlabLoader {
 		}
 	}
 
+	getRepoIssuesUrl(repoName: string) {
+		const apiBaseUrl = this.settings.apiBaseUrl || this.settings.gitlabApiUrl();
+		const encodedOrgName = encodeURIComponent(this.settings.orgName);
+		const encodedRepoName = encodeURIComponent(repoName);
+		const baseUrl = `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues`;
+		const filter = this.settings.issueFilter.trim();
+
+		return filter ? `${baseUrl}?${encodeURI(filter)}` : baseUrl;
+	}
+
+	async loadRepoIssues(repoName: string): Promise<Issue[]> {
+		return GitlabApi.loadAllPages<Issue>(
+			this.getRepoIssuesUrl(repoName),
+			this.settings.gitlabToken,
+		);
+	}
+
 	loadIssues() {
 		GitlabApi.load<Array<Issue>>(encodeURI(this.getUrl()), this.settings.gitlabToken)
 			.then((issues: Array<Issue>) => {

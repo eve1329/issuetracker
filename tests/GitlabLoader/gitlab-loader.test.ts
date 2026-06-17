@@ -15,6 +15,7 @@ const mockFileSystem = jest.spyOn(Filesystem, 'default').mockReturnValue({
 } as any);
 
 const mockLoad = jest.spyOn(GitlabApi, "load");
+const mockLoadAllPages = jest.spyOn(GitlabApi, "loadAllPages");
 
 const mockSettings: GitlabIssuesSettings = normalizeSettings({
 	gitlabUrl: 'https://gitlab.com',
@@ -103,6 +104,36 @@ describe('GitlabLoader', () => {
 		expect(mockPurgeExistingIssues).toHaveBeenCalled();
 		expect(mockProcessIssues).toHaveBeenCalledWith(
 			expect.arrayContaining([expect.any(GitlabIssue)])
+		);
+	});
+
+	it('loads repo issues with the repo endpoint and paginated API helper', async () => {
+		const mockIssues = [
+			{id: 78, title: '[BUG] 登录失败', description: '', due_date: '', web_url: '', references: ''},
+		] as Issue[];
+		mockSettings.issueFilter = '';
+		mockSettings.filter = '';
+		mockLoadAllPages.mockResolvedValue(mockIssues);
+
+		const issues = await gitlabLoader.loadRepoIssues('repo-a');
+
+		expect(issues).toEqual(mockIssues);
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues',
+			mockSettings.gitlabToken,
+		);
+	});
+
+	it('encodes repo issue URLs before loading paginated results', async () => {
+		mockSettings.orgName = 'CPF KMP/Platform';
+		mockSettings.issueFilter = 'labels=needs review';
+		mockLoadAllPages.mockResolvedValue([]);
+
+		await gitlabLoader.loadRepoIssues('repo a#1');
+
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://gitcode.com/api/v5/repos/CPF%20KMP%2FPlatform/repo%20a%231/issues?labels=needs%20review',
+			mockSettings.gitlabToken,
 		);
 	});
 });
