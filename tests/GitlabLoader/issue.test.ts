@@ -114,7 +114,6 @@ describe('GitlabIssue', () => {
 	});
 
 	it('uses org, repo, and iid in the output filename when repository context is provided', () => {
-		const mockSanitizeFileName = jest.spyOn(Utils, "sanitizeFileName");
 		const gitlabIssue = new GitlabIssue(
 			{
 				...mockIssue,
@@ -131,6 +130,78 @@ describe('GitlabIssue', () => {
 		);
 
 		expect(gitlabIssue.filename).toBe('CPF-KMP-CMP__repo-a__78');
-		expect(mockSanitizeFileName).not.toHaveBeenCalled();
+	});
+
+	it('keeps nested group project paths distinct from hyphenated top-level names', () => {
+		const nestedGroupIssue = new GitlabIssue(
+			{
+				...mockIssue,
+				iid: 78,
+				references: {
+					full: 'CPF-KMP-CMP/subgroup/repo-a#78',
+					short: '#78',
+					relative: '#78',
+				},
+			},
+			'CPF-KMP-CMP/subgroup',
+			'repo-a',
+		);
+		const hyphenatedTopLevelIssue = new GitlabIssue(
+			{
+				...mockIssue,
+				iid: 78,
+				references: {
+					full: 'CPF-KMP-CMP-subgroup/repo-a#78',
+					short: '#78',
+					relative: '#78',
+				},
+			},
+			'CPF-KMP-CMP-subgroup',
+			'repo-a',
+		);
+
+		expect(nestedGroupIssue.filename).toBe('CPF-KMP-CMP%2Fsubgroup__repo-a__78');
+		expect(hyphenatedTopLevelIssue.filename).toBe('CPF-KMP-CMP-subgroup__repo-a__78');
+		expect(nestedGroupIssue.filename).not.toBe(hyphenatedTopLevelIssue.filename);
+	});
+
+	it('derives the stable filename from references.full for raw issues', () => {
+		const gitlabIssue = new GitlabIssue({
+			...mockIssue,
+			iid: 78,
+			references: {
+				full: 'CPF-KMP-CMP/repo-a#78',
+				short: '#78',
+				relative: '#78',
+			},
+			web_url: 'https://gitlab.com/CPF-KMP-CMP/repo-a/-/issues/78',
+		});
+
+		expect(gitlabIssue.filename).toBe('CPF-KMP-CMP__repo-a__78');
+		expect(gitlabIssue.filename).not.toContain('/');
+	});
+
+	it('falls back to web_url for raw issues when references.full is unavailable', () => {
+		const gitlabIssue = new GitlabIssue({
+			...mockIssue,
+			iid: 78,
+			references: 'CPF-KMP-CMP/repo-a#78',
+			web_url: 'https://gitlab.com/CPF-KMP-CMP/repo-a/-/issues/78',
+		});
+
+		expect(gitlabIssue.filename).toBe('CPF-KMP-CMP__repo-a__78');
+		expect(gitlabIssue.filename).not.toContain('/');
+	});
+
+	it('parses web_url routes when the namespace contains a literal issues segment', () => {
+		const gitlabIssue = new GitlabIssue({
+			...mockIssue,
+			iid: 78,
+			references: 'acme/issues/repo#78',
+			web_url: 'https://gitlab.com/acme/issues/repo/-/issues/78',
+		});
+
+		expect(gitlabIssue.filename).toBe('acme%2Fissues__repo__78');
+		expect(gitlabIssue.filename).not.toContain('/');
 	});
 });

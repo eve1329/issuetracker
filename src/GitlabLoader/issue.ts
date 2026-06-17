@@ -15,7 +15,7 @@ export class GitlabIssue implements ObsidianIssue {
 
 	get filename() {
 		if (this.orgName && this.repoName) {
-			return `${this.orgName}__${this.repoName}__${this.iid}`;
+			return `${this.encodePathForFilename(this.orgName)}__${this.encodePathForFilename(this.repoName)}__${this.iid}`;
 		}
 
 		return sanitizeFileName(this.title);
@@ -78,6 +78,14 @@ export class GitlabIssue implements ObsidianIssue {
 		return values.find((value) => Boolean(value?.trim()));
 	}
 
+	private encodePathForFilename(value: string) {
+		return value
+			.split('/')
+			.filter(Boolean)
+			.map((segment) => sanitizeFileName(encodeURIComponent(segment)))
+			.join('%2F');
+	}
+
 	private parseProjectPath(referenceFull?: string) {
 		if (!referenceFull) {
 			return;
@@ -100,13 +108,20 @@ export class GitlabIssue implements ObsidianIssue {
 		try {
 			const url = new URL(webUrl);
 			const pathSegments = url.pathname.split('/').filter(Boolean);
-			const issuesSegmentIndex = pathSegments.indexOf('issues');
+			const issuesSegmentIndex = pathSegments.lastIndexOf('issues');
 
 			if (issuesSegmentIndex < 2) {
 				return;
 			}
 
-			const projectSegments = pathSegments.slice(0, issuesSegmentIndex);
+			const projectEndIndex = pathSegments[issuesSegmentIndex - 1] === '-'
+				? issuesSegmentIndex - 1
+				: issuesSegmentIndex;
+			const projectSegments = pathSegments.slice(0, projectEndIndex);
+
+			if (projectSegments.length < 2) {
+				return;
+			}
 
 			return {
 				orgName: projectSegments.slice(0, -1).join('/'),
