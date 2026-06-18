@@ -2,7 +2,7 @@ import GitlabApi from "./gitlab-api";
 import {GitlabIssue} from "./issue";
 import {App} from "obsidian";
 import Filesystem from "../filesystem";
-import {Issue} from "./issue-types";
+import {GitCodeOrgRepository, Issue} from "./issue-types";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
 import {logger} from "../utils/utils";
 
@@ -40,11 +40,39 @@ export default class GitlabLoader {
 		return filter ? `${baseUrl}?${encodeURI(filter)}` : baseUrl;
 	}
 
+	getOrgReposUrl() {
+		const apiBaseUrl = this.settings.apiBaseUrl || this.settings.gitlabApiUrl();
+		const encodedOrgName = encodeURIComponent(this.settings.orgName);
+
+		return `${apiBaseUrl}/orgs/${encodedOrgName}/repos`;
+	}
+
 	async loadRepoIssues(repoName: string): Promise<Issue[]> {
 		return GitlabApi.loadAllPages<Issue>(
 			this.getRepoIssuesUrl(repoName),
 			this.settings.gitlabToken,
 		);
+	}
+
+	async loadOrgRepos(): Promise<GitCodeOrgRepository[]> {
+		return GitlabApi.loadAllPages<GitCodeOrgRepository>(
+			this.getOrgReposUrl(),
+			this.settings.gitlabToken,
+		);
+	}
+
+	async resolveRepoNames(): Promise<string[]> {
+		if (!this.settings.syncAllOrgRepos) {
+			return this.settings.repoList;
+		}
+
+		const repos = await this.loadOrgRepos();
+
+		return Array.from(new Set(
+			repos
+				.map((repo) => repo.path?.trim() || repo.name?.trim() || '')
+				.filter(Boolean),
+		));
 	}
 
 	loadIssues() {

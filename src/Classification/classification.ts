@@ -40,6 +40,15 @@ export function classifyIssue(
 		}
 	}
 
+	for (const [keyword, requestKind] of Object.entries(rules.titleKeywords ?? {})) {
+		if (issue.title.includes(keyword)) {
+			return {
+				requestKind,
+				requestKindMatchedBy: 'title-keyword' as const,
+			};
+		}
+	}
+
 	return {
 		requestKind: 'unknown' as const,
 		requestKindMatchedBy: 'none' as const,

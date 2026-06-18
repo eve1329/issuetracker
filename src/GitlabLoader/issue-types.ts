@@ -8,6 +8,29 @@ export interface Assignee {
 	readonly web_url: string;
 }
 
+export interface GitCodeUser {
+	readonly avatar_url?: string;
+	readonly html_url?: string;
+	readonly id: number | string;
+	readonly login: string;
+	readonly name: string;
+}
+
+export interface GitCodeRepository {
+	readonly id: number;
+	readonly full_name: string;
+	readonly path: string;
+	readonly name: string;
+}
+
+export interface GitCodeOrgRepository {
+	readonly id: number;
+	readonly path: string;
+	readonly name: string;
+	readonly full_name?: string;
+	readonly open_issues_count?: number;
+}
+
 export interface Epic {
 	readonly id: number,
 	readonly iid: number,
@@ -39,14 +62,17 @@ export interface ShortIssue {
 	readonly title: string,
 	readonly created_at: string,
 	readonly updated_at: string
+	readonly number?: number | string,
 }
 
 export interface Issue extends ShortIssue {
 	readonly web_url: string;
+	readonly html_url?: string;
 	readonly references: string | References;
 
 	readonly assignees: Assignee[];
 	readonly author: Assignee;
+	readonly user?: GitCodeUser;
 	readonly closed_by: Assignee;
 	readonly epic: Epic;
 	readonly labels: string[];
@@ -75,6 +101,7 @@ export interface Issue extends ShortIssue {
 		completed_count: number
 	}
 	readonly milestone: ShortIssue
+	readonly repository?: GitCodeRepository;
 }
 
 export interface ObsidianIssue extends Issue {

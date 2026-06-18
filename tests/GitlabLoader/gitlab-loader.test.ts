@@ -24,6 +24,7 @@ const mockSettings: GitlabIssuesSettings = normalizeSettings({
 	gitlabIssuesLevel: 'project',
 	orgName: 'CPF-KMP-CMP',
 	repoList: [],
+	syncAllOrgRepos: false,
 	gitlabAppId: '12345',
 	internalUserWhitelist: [],
 	classificationRules: {
@@ -56,6 +57,13 @@ describe('GitlabLoader', () => {
 	let gitlabLoader: GitlabLoader;
 
 	beforeEach(() => {
+		mockPurgeExistingIssues.mockReset();
+		mockProcessIssues.mockReset();
+		mockLoad.mockReset();
+		mockLoadAllPages.mockReset();
+		mockSettings.orgName = 'CPF-KMP-CMP';
+		mockSettings.repoList = [];
+		mockSettings.syncAllOrgRepos = false;
 		mockSettings.gitlabIssuesLevel = 'project';
 		mockSettings.issueFilter = 'due_date=month';
 		mockSettings.filter = 'due_date=month';
@@ -135,5 +143,42 @@ describe('GitlabLoader', () => {
 			'https://gitcode.com/api/v5/repos/CPF%20KMP%2FPlatform/repo%20a%231/issues?labels=needs%20review',
 			mockSettings.gitlabToken,
 		);
+	});
+
+	it('loads organization repositories with the paginated API helper', async () => {
+		mockLoadAllPages.mockResolvedValueOnce([
+			{path: 'repo-a', name: 'repo-a'},
+		] as any);
+
+		const repos = await gitlabLoader.loadOrgRepos();
+
+		expect(repos).toEqual([{path: 'repo-a', name: 'repo-a'}]);
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://gitcode.com/api/v5/orgs/CPF-KMP-CMP/repos',
+			mockSettings.gitlabToken,
+		);
+	});
+
+	it('returns configured repo list when syncAllOrgRepos is disabled', async () => {
+		mockSettings.repoList = ['repo-a', 'repo-b'];
+		mockSettings.syncAllOrgRepos = false;
+
+		const repoNames = await gitlabLoader.resolveRepoNames();
+
+		expect(repoNames).toEqual(['repo-a', 'repo-b']);
+		expect(mockLoadAllPages).not.toHaveBeenCalled();
+	});
+
+	it('resolves repo names from the organization repository list when syncAllOrgRepos is enabled', async () => {
+		mockSettings.syncAllOrgRepos = true;
+		mockLoadAllPages.mockResolvedValueOnce([
+			{path: 'repo-a', name: 'repo-a'},
+			{path: 'repo-b', name: 'repo-b'},
+			{path: 'repo-a', name: 'repo-a duplicate'},
+		] as any);
+
+		const repoNames = await gitlabLoader.resolveRepoNames();
+
+		expect(repoNames).toEqual(['repo-a', 'repo-b']);
 	});
 });

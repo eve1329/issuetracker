@@ -6,12 +6,12 @@ export default class GitlabApi {
 
 		const headers = { 'PRIVATE-TOKEN': gitlabToken };
 
-		const params: RequestUrlParam = { url: url, headers: headers };
+		const params: RequestUrlParam = { url: url, headers: headers, throw: false };
 
 		return requestUrl(params)
 			.then((response: RequestUrlResponse) => {
 				if (response.status !== 200) {
-					throw new Error(response.text);
+					throw new Error(GitlabApi.extractErrorMessage(response.text));
 				}
 
 				return response.json as Promise<T>;
@@ -41,5 +41,23 @@ export default class GitlabApi {
 		}
 
 		return result;
+	}
+
+	private static extractErrorMessage(responseText: string) {
+		try {
+			const parsed = JSON.parse(responseText);
+
+			if (typeof parsed?.error_message === 'string' && parsed.error_message.trim().length > 0) {
+				return parsed.error_message;
+			}
+
+			if (typeof parsed?.message === 'string' && parsed.message.trim().length > 0) {
+				return parsed.message;
+			}
+		} catch (error) {
+			// Ignore JSON parsing errors and fall back to the raw response text below.
+		}
+
+		return responseText;
 	}
 }

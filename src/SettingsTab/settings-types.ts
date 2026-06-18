@@ -4,6 +4,7 @@ export type RequestKind = 'bug' | 'requirement' | 'unknown';
 
 export interface ClassificationRules {
 	titlePrefixes: Record<string, Exclude<RequestKind, 'unknown'>>;
+	titleKeywords?: Record<string, Exclude<RequestKind, 'unknown'>>;
 	labels: Record<string, Exclude<RequestKind, 'unknown'>>;
 }
 
@@ -14,6 +15,7 @@ export interface GitlabIssuesSettings {
 	gitlabIssuesLevel: GitlabIssuesLevel;
 	orgName: string;
 	repoList: string[];
+	syncAllOrgRepos: boolean;
 	gitlabAppId: string;
 	internalUserWhitelist: string[];
 	classificationRules: ClassificationRules;
@@ -66,7 +68,7 @@ export interface DropdownInputs extends Setting {
 	options: Record<string, string>
 }
 export interface SettingCheckboxInput extends Omit<Setting, "description"> {
-	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports'>
+	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports' | 'syncAllOrgRepos'>
 }
 
 export interface SettingsTab {

@@ -20,7 +20,7 @@ export interface NormalizedIssueNote {
 	labels: string[];
 	issueTypeRaw: string;
 	requestKind: RequestKind;
-	requestKindMatchedBy: 'title-prefix' | 'label' | 'none';
+	requestKindMatchedBy: 'title-prefix' | 'title-keyword' | 'label' | 'none';
 	referencesFull: string;
 }
 

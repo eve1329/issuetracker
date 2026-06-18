@@ -18,6 +18,7 @@ interface SyncState {
 	memberSyncStatus?: 'success' | 'degraded';
 	repositorySyncStatus?: 'success' | 'degraded';
 	warningMessages?: string[];
+	memberSyncProgress?: InternalMemberIndex['syncProgress'];
 }
 
 export default class SyncService {
@@ -38,6 +39,7 @@ export default class SyncService {
 		const dailyBriefsFolder = `${this.settings.reportsFolder}/daily-brief`;
 		const previousSyncState = await this.fs.readJson<SyncState>(`${this.settings.metaFolder}/sync-state.json`);
 		const warningMessages: string[] = [];
+		const repoNames = await this.loader.resolveRepoNames();
 
 		await this.fs.ensureFolders([
 			this.settings.outputDir,
@@ -49,16 +51,31 @@ export default class SyncService {
 
 		let memberSyncStatus: NonNullable<SyncState['memberSyncStatus']> = 'success';
 		let internalMembers: InternalMemberIndex;
+		const previousInternalMembers = await this.fs.readJson<InternalMemberIndex>(`${this.settings.metaFolder}/internal-members.json`);
 		try {
-			internalMembers = await this.memberLoader.loadInternalMemberIndex();
+			const memberLoadResult = await this.memberLoader.loadInternalMemberIndex(repoNames, previousInternalMembers);
+			internalMembers = memberLoadResult.index;
 			await this.fs.writeJson(`${this.settings.metaFolder}/internal-members.json`, internalMembers);
+			if (
+				memberLoadResult.warningMessages.length > 0
+				|| (internalMembers.syncProgress?.pendingRepoCount ?? 0) > 0
+			) {
+				memberSyncStatus = 'degraded';
+				warningMessages.push(...memberLoadResult.warningMessages);
+				memberLoadResult.warningMessages.forEach((message) => logger(message));
+				if ((internalMembers.syncProgress?.pendingRepoCount ?? 0) > 0) {
+					const message = `Internal member sync is still catching up: `
+						+ `${internalMembers.syncProgress?.successRepoCount ?? 0}/${internalMembers.syncProgress?.totalRepos ?? repoNames.length} repos fetched successfully`;
+					warningMessages.push(message);
+					logger(message);
+				}
+			}
 		} catch (error) {
 			memberSyncStatus = 'degraded';
 			const message = `Failed to sync internal members: ${this.getErrorMessage(error)}`;
 			warningMessages.push(message);
 			logger(message);
-			internalMembers = await this.fs.readJson<InternalMemberIndex>(`${this.settings.metaFolder}/internal-members.json`)
-				?? {usernames: {}};
+			internalMembers = previousInternalMembers ?? {usernames: {}};
 		}
 
 		const normalizedNotes: NormalizedIssueNote[] = [];
@@ -66,7 +83,7 @@ export default class SyncService {
 		const failedRepoSet = new Set<string>();
 		let issueStorageFailed = false;
 
-		for (const repoName of this.settings.repoList) {
+		for (const repoName of repoNames) {
 			try {
 				const repoIssues = await this.loader.loadRepoIssues(repoName);
 				normalizedNotes.push(
@@ -82,7 +99,7 @@ export default class SyncService {
 
 		if (this.settings.purgeIssues) {
 			try {
-				const successfulRepos = this.settings.repoList.filter((repoName) => !failedRepoSet.has(repoName));
+				const successfulRepos = repoNames.filter((repoName) => !failedRepoSet.has(repoName));
 				await this.fs.purgeIssueNotes(successfulRepos);
 			} catch (error) {
 				issueStorageFailed = true;
@@ -151,6 +168,7 @@ export default class SyncService {
 			memberSyncStatus,
 			repositorySyncStatus,
 			warningMessages,
+			memberSyncProgress: internalMembers.syncProgress,
 		} as SyncState);
 	}
 
@@ -159,20 +177,23 @@ export default class SyncService {
 		repoName: string,
 		internalMembers: InternalMemberIndex,
 	): NormalizedIssueNote {
-		const authorUsername = issue.author?.username ?? '';
-		const authorName = issue.author?.name ?? '';
+		const authorUsername = issue.author?.username ?? issue.user?.login ?? '';
+		const authorName = issue.author?.name ?? issue.user?.name ?? '';
+		const iid = this.resolveIssueIid(issue);
+		const webUrl = issue.web_url ?? issue.html_url ?? '';
+		const projectId = issue.project_id ?? issue.repository?.id ?? 0;
 		const internalAuthor = matchInternalAuthor(authorUsername, internalMembers);
 		const classification = classifyIssue(issue, this.settings.classificationRules);
 
 		return {
 			id: issue.id,
-			iid: issue.iid,
+			iid,
 			title: issue.title,
 			state: issue.state,
 			createdAt: issue.created_at,
 			updatedAt: issue.updated_at,
-			webUrl: issue.web_url,
-			projectId: issue.project_id,
+			webUrl,
+			projectId,
 			projectPath: this.resolveProjectPath(issue, repoName),
 			sourceScope: this.settings.gitlabIssuesLevel,
 			sourceRepo: repoName,
@@ -189,6 +210,8 @@ export default class SyncService {
 	}
 
 	private resolveReferencesFull(issue: Issue, repoName: string) {
+		const issueIid = this.resolveIssueIid(issue);
+
 		if (typeof issue.references === 'string') {
 			if (issue.references.includes('#')) {
 				const [projectPath] = issue.references.split('#');
@@ -198,17 +221,21 @@ export default class SyncService {
 			}
 
 			if (issue.references.trim().length > 0) {
-				return `${this.settings.orgName}/${repoName}#${issue.iid}`;
+				return `${this.settings.orgName}/${repoName}#${issueIid}`;
 			}
 
-			return `${this.settings.orgName}/${repoName}#${issue.iid}`;
+			return `${this.settings.orgName}/${repoName}#${issueIid}`;
 		}
 
 		if (issue.references?.full) {
 			return issue.references.full;
 		}
 
-		return `${this.settings.orgName}/${repoName}#${issue.iid}`;
+		if (issue.repository?.full_name) {
+			return `${issue.repository.full_name}#${issueIid}`;
+		}
+
+		return `${this.settings.orgName}/${repoName}#${issueIid}`;
 	}
 
 	private resolveProjectPath(issue: Issue, repoName: string) {
@@ -222,7 +249,11 @@ export default class SyncService {
 		}
 
 		try {
-			const url = new URL(issue.web_url);
+			const issueUrl = issue.web_url ?? issue.html_url;
+			if (!issueUrl) {
+				throw new Error('Missing issue URL');
+			}
+			const url = new URL(issueUrl);
 			const pathSegments = url.pathname.split('/').filter(Boolean);
 			const issuesSegmentIndex = pathSegments.lastIndexOf('issues');
 
@@ -241,6 +272,26 @@ export default class SyncService {
 		}
 
 		return `${this.settings.orgName}/${repoName}`;
+	}
+
+	private resolveIssueIid(issue: Issue) {
+		if (typeof issue.iid === 'number') {
+			return issue.iid;
+		}
+
+		const numberValue = issue.number;
+		if (typeof numberValue === 'number') {
+			return numberValue;
+		}
+
+		if (typeof numberValue === 'string') {
+			const parsed = Number(numberValue);
+			if (Number.isFinite(parsed)) {
+				return parsed;
+			}
+		}
+
+		return issue.id;
 	}
 
 	private getErrorMessage(error: unknown) {

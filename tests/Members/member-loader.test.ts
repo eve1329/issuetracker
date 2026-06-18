@@ -5,14 +5,16 @@ import GitlabApi from "../../src/GitlabLoader/gitlab-api";
 const mockLoadAllPages = jest.spyOn(GitlabApi, "loadAllPages");
 
 describe('MemberLoader', () => {
+	beforeEach(() => {
+		mockLoadAllPages.mockReset();
+	});
+
 	afterEach(() => {
 		jest.clearAllMocks();
 	});
 
-	it('merges org members, repo collaborators, and whitelist users into one index', async () => {
-		mockLoadAllPages
-			.mockResolvedValueOnce([{username: 'org_user'}])
-			.mockResolvedValueOnce([{username: 'repo_user'}]);
+	it('builds the internal member index from repo collaborators and whitelist users only', async () => {
+		mockLoadAllPages.mockResolvedValueOnce([{username: 'repo_user'}]);
 
 		const loader = new MemberLoader({
 			...DEFAULT_SETTINGS,
@@ -21,25 +23,21 @@ describe('MemberLoader', () => {
 			internalUserWhitelist: ['manual_user'],
 		});
 
-		const index = await loader.loadInternalMemberIndex();
+		const result = await loader.loadInternalMemberIndex();
 
-		expect(index.usernames.org_user.source).toBe('org');
-		expect(index.usernames.repo_user.source).toBe('repo');
-		expect(index.usernames.repo_user.repo).toBe('repo-a');
-		expect(index.usernames.manual_user.source).toBe('whitelist');
+		expect(result.index.usernames.repo_user.source).toBe('repo');
+		expect(result.index.usernames.repo_user.repo).toBe('repo-a');
+		expect(result.index.usernames.manual_user.source).toBe('whitelist');
+		expect(result.warningMessages).toEqual([]);
+		expect(mockLoadAllPages).toHaveBeenCalledTimes(1);
 		expect(mockLoadAllPages).toHaveBeenNthCalledWith(
 			1,
-			'https://gitcode.com/api/v5/orgs/CPF-KMP-CMP/members',
-			'',
-		);
-		expect(mockLoadAllPages).toHaveBeenNthCalledWith(
-			2,
 			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/collaborators',
 			'',
 		);
 	});
 
-	it('keeps the first internal source when the same username appears multiple times', async () => {
+	it('keeps the first repo collaborator source when the same username appears multiple times', async () => {
 		mockLoadAllPages
 			.mockResolvedValueOnce([{username: 'shared_user'}])
 			.mockResolvedValueOnce([{username: 'shared_user'}]);
@@ -47,15 +45,122 @@ describe('MemberLoader', () => {
 		const loader = new MemberLoader({
 			...DEFAULT_SETTINGS,
 			orgName: 'CPF-KMP-CMP',
-			repoList: ['repo-a'],
+			repoList: ['repo-a', 'repo-b'],
 			internalUserWhitelist: ['shared_user'],
 		});
 
-		const index = await loader.loadInternalMemberIndex();
+		const result = await loader.loadInternalMemberIndex();
 
-		expect(index.usernames.shared_user).toEqual({
+		expect(result.index.usernames.shared_user).toEqual({
 			username: 'shared_user',
-			source: 'org',
+			source: 'repo',
+			repo: 'repo-a',
 		});
+		expect(result.warningMessages).toEqual([]);
+	});
+
+	it('keeps syncing remaining repos and returns warnings when some collaborator endpoints fail', async () => {
+		mockLoadAllPages
+			.mockRejectedValueOnce(new Error('403 Forbidden - Unauthorized access'))
+			.mockResolvedValueOnce([{username: 'repo_b_user'}]);
+
+		const loader = new MemberLoader({
+			...DEFAULT_SETTINGS,
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a', 'repo-b'],
+			internalUserWhitelist: ['manual_user'],
+		});
+
+		const result = await loader.loadInternalMemberIndex();
+
+		expect(result.index.usernames.repo_b_user).toEqual({
+			username: 'repo_b_user',
+			source: 'repo',
+			repo: 'repo-b',
+		});
+		expect(result.index.usernames.manual_user.source).toBe('whitelist');
+		expect(result.warningMessages).toEqual([
+			'Failed to sync repo collaborators for repo-a: 403 Forbidden - Unauthorized access',
+		]);
+	});
+
+	it('reuses cached repo members and only fetches a limited batch per run', async () => {
+		mockLoadAllPages
+			.mockResolvedValueOnce([{username: 'repo_b_user'}]);
+
+		const loader = new MemberLoader({
+			...DEFAULT_SETTINGS,
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a', 'repo-b', 'repo-c'],
+			internalUserWhitelist: [],
+		});
+
+		const result = await loader.loadInternalMemberIndex(
+			['repo-a', 'repo-b', 'repo-c'],
+			{
+				usernames: {
+					repo_a_user: {username: 'repo_a_user', source: 'repo', repo: 'repo-a'},
+				},
+				repoMembers: {
+					'repo-a': ['repo_a_user'],
+				},
+				repoSyncState: {
+					'repo-a': {status: 'success', lastSuccessAt: '2026-06-18T00:00:00.000Z'},
+					'repo-c': {status: 'forbidden', nextRetryAt: '2999-01-01T00:00:00.000Z'},
+				},
+			},
+		);
+
+		expect(result.index.usernames.repo_a_user).toEqual({
+			username: 'repo_a_user',
+			source: 'repo',
+			repo: 'repo-a',
+		});
+		expect(result.index.usernames.repo_b_user).toEqual({
+			username: 'repo_b_user',
+			source: 'repo',
+			repo: 'repo-b',
+		});
+		expect(result.index.syncProgress).toEqual(expect.objectContaining({
+			totalRepos: 3,
+			successRepoCount: 1,
+			forbiddenRepoCount: 1,
+			errorRepoCount: 1,
+			pendingRepoCount: 1,
+			cachedRepoCount: 2,
+			attemptedReposThisRun: ['repo-b', 'repo-a'],
+		}));
+		expect(mockLoadAllPages).toHaveBeenCalledTimes(2);
+	});
+
+	it('stops the current run after a rate limit response and keeps already cached repo members', async () => {
+		mockLoadAllPages
+			.mockResolvedValueOnce([{username: 'repo_a_user'}])
+			.mockRejectedValueOnce(new Error('429 Threshold: 50 times per user per Minute'));
+
+		const loader = new MemberLoader({
+			...DEFAULT_SETTINGS,
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a', 'repo-b', 'repo-c'],
+			internalUserWhitelist: [],
+		});
+
+		const result = await loader.loadInternalMemberIndex(['repo-a', 'repo-b', 'repo-c']);
+
+		expect(result.index.usernames.repo_a_user).toEqual({
+			username: 'repo_a_user',
+			source: 'repo',
+			repo: 'repo-a',
+		});
+		expect(result.index.syncProgress).toEqual(expect.objectContaining({
+			successRepoCount: 1,
+			rateLimitedRepoCount: 1,
+			pendingRepoCount: 2,
+			attemptedReposThisRun: ['repo-a', 'repo-b'],
+		}));
+		expect(result.warningMessages).toEqual([
+			'Failed to sync repo collaborators for repo-b: 429 Threshold: 50 times per user per Minute',
+		]);
+		expect(mockLoadAllPages).toHaveBeenCalledTimes(2);
 	});
 });

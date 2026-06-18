@@ -7,12 +7,21 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	gitlabIssuesLevel: 'personal',
 	orgName: 'CPF-KMP-CMP',
 	repoList: [],
+	syncAllOrgRepos: false,
 	gitlabAppId: '',
 	internalUserWhitelist: [],
 	classificationRules: {
 		titlePrefixes: {
 			'[BUG]': 'bug',
 			'[需求]': 'requirement',
+		},
+		titleKeywords: {
+			'添加': 'requirement',
+			'手册': 'requirement',
+			'示例': 'requirement',
+			'支持': 'requirement',
+			'适配': 'requirement',
+			'替代': 'requirement',
 		},
 		labels: {},
 	},
@@ -40,9 +49,25 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 	const canonicalFilter = hasExplicitIssueFilter
 		? rawData.issueFilter ?? ''
 		: rawData.filter ?? DEFAULT_SETTINGS.issueFilter;
+	const rawClassificationRules = rawData.classificationRules;
+	const classificationRules = {
+		titlePrefixes: {
+			...DEFAULT_SETTINGS.classificationRules.titlePrefixes,
+			...(rawClassificationRules?.titlePrefixes ?? {}),
+		},
+		titleKeywords: {
+			...DEFAULT_SETTINGS.classificationRules.titleKeywords,
+			...(rawClassificationRules?.titleKeywords ?? {}),
+		},
+		labels: {
+			...DEFAULT_SETTINGS.classificationRules.labels,
+			...(rawClassificationRules?.labels ?? {}),
+		},
+	};
 
 	return {
 		...mergedSettings,
+		classificationRules,
 		issueFilter: canonicalFilter,
 		filter: canonicalFilter,
 	};
@@ -89,7 +114,7 @@ export const settings: SettingsTab = {
 		},
 		{
 			title: 'Repository List',
-			description: 'One repository per line.',
+			description: 'One repository per line. Ignored when syncing all organization repositories.',
 			placeholder: 'repo-a\nrepo-b',
 			value: 'repoList',
 			modifier: 'stringArray',
@@ -106,7 +131,7 @@ export const settings: SettingsTab = {
 		{
 			title: 'Classification Rules',
 			description: 'JSON object that controls issue classification.',
-			placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  },\n  "labels": {}\n}',
+			placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  },\n  "titleKeywords": {\n    "添加": "requirement"\n  },\n  "labels": {}\n}',
 			value: 'classificationRules',
 			modifier: 'json',
 			inputType: 'textarea'
@@ -167,6 +192,10 @@ export const settings: SettingsTab = {
 		{
 			title: 'Generate daily reports?',
 			value: 'generateDailyReports'
+		},
+		{
+			title: 'Sync all organization repositories?',
+			value: 'syncAllOrgRepos'
 		}
 	],
 	getGitlabIssuesLevel: (currentLevel) => {

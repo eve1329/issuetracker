@@ -10,6 +10,7 @@ describe('GitlabApi', () => {
 	const mockParams: RequestUrlParam = {
 		url: mockUrl,
 		headers: { 'PRIVATE-TOKEN': mockToken },
+		throw: false,
 	};
 
 	afterEach(() => {
@@ -44,6 +45,37 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenCalledWith(mockParams);
 	});
 
+	it('surfaces response text when the server rejects the request body with an auth message', async () => {
+		const mockResponse = {
+			status: 400,
+			json: Promise.resolve({message: '403 Forbidden - Unauthorized access'}),
+			text: '403 Forbidden - Unauthorized access',
+		};
+
+		mockRequestUrl.mockResolvedValue(mockResponse as RequestUrlResponse);
+
+		await expect(GitlabApi.load(mockUrl, mockToken)).rejects.toThrow('403 Forbidden - Unauthorized access');
+		expect(mockRequestUrl).toHaveBeenCalledWith(mockParams);
+	});
+
+	it('extracts the GitCode error_message field from a JSON error body', async () => {
+		const mockResponse = {
+			status: 400,
+			json: Promise.resolve({
+				error_code: 403,
+				error_code_name: 'UN_KNOW',
+				error_message: '403 Forbidden - Unauthorized access',
+				trace_id: 'cb890ccc3602faa80d39d0afd3d7972d',
+			}),
+			text: '{"error_code":403,"error_code_name":"UN_KNOW","error_message":"403 Forbidden - Unauthorized access","trace_id":"cb890ccc3602faa80d39d0afd3d7972d"}',
+		};
+
+		mockRequestUrl.mockResolvedValue(mockResponse as RequestUrlResponse);
+
+		await expect(GitlabApi.load(mockUrl, mockToken)).rejects.toThrow('403 Forbidden - Unauthorized access');
+		expect(mockRequestUrl).toHaveBeenCalledWith(mockParams);
+	});
+
 	it('loads pages until a partial page is returned', async () => {
 		const pageOne = Array.from({length: 100}, (_, index) => ({id: index + 1}));
 
@@ -71,10 +103,12 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenNthCalledWith(1, {
 			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=1',
 			headers: {'PRIVATE-TOKEN': mockToken},
+			throw: false,
 		});
 		expect(mockRequestUrl).toHaveBeenNthCalledWith(2, {
 			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=2',
 			headers: {'PRIVATE-TOKEN': mockToken},
+			throw: false,
 		});
 	});
 
@@ -111,6 +145,7 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenNthCalledWith(3, {
 			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?per_page=100&page=3',
 			headers: {'PRIVATE-TOKEN': mockToken},
+			throw: false,
 		});
 	});
 });

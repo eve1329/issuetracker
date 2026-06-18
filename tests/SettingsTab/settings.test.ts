@@ -10,12 +10,21 @@ describe('DEFAULT_SETTINGS', () => {
 			apiBaseUrl: 'https://gitcode.com/api/v5',
 			orgName: 'CPF-KMP-CMP',
 			repoList: [],
+			syncAllOrgRepos: false,
 			gitlabAppId: '',
 			internalUserWhitelist: [],
 			classificationRules: {
 				titlePrefixes: {
 					'[BUG]': 'bug',
 					'[需求]': 'requirement',
+				},
+				titleKeywords: {
+					'添加': 'requirement',
+					'手册': 'requirement',
+					'示例': 'requirement',
+					'支持': 'requirement',
+					'适配': 'requirement',
+					'替代': 'requirement',
 				},
 				labels: {},
 			},
@@ -56,6 +65,10 @@ describe('DEFAULT_SETTINGS', () => {
 		expect(DEFAULT_SETTINGS.reportsFolder).toBe('GitCode Issues/reports');
 		expect(DEFAULT_SETTINGS.generateDailyReports).toBe(true);
 		expect(DEFAULT_SETTINGS.classificationRules.labels).toEqual({});
+		expect(DEFAULT_SETTINGS.classificationRules.titleKeywords).toMatchObject({
+			'添加': 'requirement',
+			'手册': 'requirement',
+		});
 	});
 });
 
@@ -87,6 +100,32 @@ describe('settings', () => {
 
 		expect(normalized.issueFilter).toBe('');
 		expect(normalized.filter).toBe('');
+	});
+
+	it('deep-merges classification rules so saved overrides keep new default keyword rules', () => {
+		const normalized = normalizeSettings({
+			classificationRules: {
+				titlePrefixes: {
+					'[Task]': 'requirement',
+				},
+				labels: {
+					bug: 'bug',
+				},
+			},
+		});
+
+		expect(normalized.classificationRules.titlePrefixes).toEqual({
+			'[BUG]': 'bug',
+			'[需求]': 'requirement',
+			'[Task]': 'requirement',
+		});
+		expect(normalized.classificationRules.labels).toEqual({
+			bug: 'bug',
+		});
+		expect(normalized.classificationRules.titleKeywords).toMatchObject({
+			'添加': 'requirement',
+			'手册': 'requirement',
+		});
 	});
 
 	it('should have the correct title', () => {
@@ -134,7 +173,7 @@ describe('settings', () => {
 			},
 			{
 				title: 'Repository List',
-				description: 'One repository per line.',
+				description: 'One repository per line. Ignored when syncing all organization repositories.',
 				placeholder: 'repo-a\nrepo-b',
 				value: 'repoList',
 				modifier: 'stringArray',
@@ -151,7 +190,7 @@ describe('settings', () => {
 			{
 				title: 'Classification Rules',
 				description: 'JSON object that controls issue classification.',
-				placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  },\n  "labels": {}\n}',
+				placeholder: '{\n  "titlePrefixes": {\n    "[BUG]": "bug"\n  },\n  "titleKeywords": {\n    "添加": "requirement"\n  },\n  "labels": {}\n}',
 				value: 'classificationRules',
 				modifier: 'json',
 				inputType: 'textarea',
@@ -224,6 +263,10 @@ describe('settings', () => {
 				{
 					title: 'Generate daily reports?',
 					value: 'generateDailyReports',
+				},
+				{
+					title: 'Sync all organization repositories?',
+					value: 'syncAllOrgRepos',
 				},
 			];
 
