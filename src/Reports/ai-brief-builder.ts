@@ -7,6 +7,8 @@ export function buildAiBriefMarkdown(report: DailyReport): string {
 		return `- ${username}: ${issueCount} issues`;
 	});
 
+	const unknownIssues = report.unknownIssues.map((issue) => `- ${issue.sourceRepo} #${issue.iid}: ${issue.title}`);
+
 	return [
 		`# GitCode Issue Daily Brief - ${report.date}`,
 		'',
@@ -25,6 +27,9 @@ export function buildAiBriefMarkdown(report: DailyReport): string {
 		'',
 		'## New Requirements',
 		...report.requirementIssues.map((issue) => `- ${issue.sourceRepo} #${issue.iid}: ${issue.title}`),
+		'',
+		'## Unknown Classification',
+		...unknownIssues,
 		'',
 		'## Notes For AI',
 		'- Highlight the main issue categories by volume',
