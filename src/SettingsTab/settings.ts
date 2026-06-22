@@ -112,8 +112,8 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 		},
 		settingInputs: [{
-			title: 'Gitlab instance URL',
-			description: 'Use your own Gitlab instance instead of the public hosted Gitlab.',
+			title: 'GitCode Instance URL',
+			description: 'Base URL for your GitCode instance.',
 			placeholder: 'https://gitcode.com',
 			value: "gitlabUrl",
 		},
@@ -125,20 +125,20 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: 'Personal Access Token',
-				description: 'Create a personal access token in your Gitlab account and enter it here.',
+				description: 'Create a personal access token in your GitCode account and enter it here.',
 				placeholder: 'Token',
 				value: "gitlabToken"
 			},
 			{
-				title: 'Template File',
-				description: 'Path to an Obsidian note to use as the template.',
+				title: 'Legacy Template File',
+				description: 'Optional Obsidian note path used by the legacy compatibility importer.',
 				placeholder: 'your-template-file.md',
 				value: "templateFile"
 			},
 			{
 				title: "Output Folder",
-				description: 'Path to an Obsidian folder to write output files to.',
-				placeholder: "IssueTracker",
+				description: 'Root folder for generated issue notes, metadata, and reports.',
+				placeholder: "GitCode Issues",
 				value: "outputDir",
 				modifier: "normalizePath"
 			},
@@ -195,34 +195,34 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: "Issues Filter",
-				description: 'The query string used to filter the issues.',
+				description: 'Raw query string appended to GitCode issue list endpoints.',
 				placeholder: '',
 				value: 'issueFilter'
 			}
 		],
 		dropdowns: [{
 			title: 'Refresh Rate',
-			description: "That rate at which gitlab issues will be pulled.",
+			description: "How often IssueTracker should refresh GitCode issues.",
 			options: SHARED_OPTIONS.refreshRates,
 			value: "intervalOfRefresh",
 		},
 			{
-				title: "GitLab Scope",
-				description: "The scope at which the api request will pull.",
+				title: "Legacy API Scope",
+				description: "Compatibility mode for the original single-endpoint importer.",
 				options: SHARED_OPTIONS.scopeOptionsEn,
 				value: "gitlabIssuesLevel"
 			}
 		],
 		checkBoxInputs: [{
-			title: 'Purge issues that are no longer in Gitlab?',
+			title: 'Purge generated issues that are no longer returned by GitCode?',
 			value: "purgeIssues",
 		},
 			{
-				title: 'Show refresh Gitlab issues icon in left ribbon?',
+				title: 'Show the manual sync icon in the left ribbon?',
 				value: 'showIcon',
 			},
 			{
-				title: 'Should refresh Gitlab issues on Startup?',
+				title: 'Refresh issues on startup?',
 				value: 'refreshOnStartup'
 			},
 			{
@@ -236,15 +236,15 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 		],
 		getGitlabIssuesLevel: (currentLevel) => {
 			return currentLevel === 'group'
-				? {title: "Group", url: "https://docs.gitlab.com/ee/user/group/#get-the-group-id"}
-				: {title: "Project", url: "https://docs.gitlab.com/ee/user/project/working_with_projects.html#access-the-project-overview-page-by-using-the-project-id"};
+				? {title: "Organization", url: "https://docs.gitcode.com/en/docs/orgs/"}
+				: {title: "Repository", url: "https://docs.gitcode.com/en/docs/repos/"};
 		},
-		getGitlabIdSettingName: (currentLevelTitle) => `Set Gitlab ${currentLevelTitle} Id`,
-		getGitlabIdLinkText: (currentLevelTitle) => `Find your ${currentLevelTitle} Id.`,
-		moreInformationTitle: 'More Information',
+		getGitlabIdSettingName: (currentLevelTitle) => `Set ${currentLevelTitle} identifier`,
+		getGitlabIdLinkText: (currentLevelTitle) => `Open the GitCode ${currentLevelTitle} docs.`,
+		moreInformationTitle: 'References',
 		gitlabDocumentation: {
-			title: 'View the Gitlab documentation',
-			url: 'https://docs.gitlab.com/ee/api/issues.html#list-issues'
+			title: 'View the GitCode issues API documentation',
+			url: 'https://docs.gitcode.com/en/docs/repos/issues/'
 		}
 	},
 	'zh-CN': {
@@ -258,8 +258,8 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 		},
 		settingInputs: [{
-			title: 'Gitlab 实例地址',
-			description: '如果你使用自建 Gitlab 实例，可以在这里替换默认托管地址。',
+			title: 'GitCode 实例地址',
+			description: 'GitCode 实例基础地址。如果不是使用公共的 gitcode.com，可在这里替换。',
 			placeholder: 'https://gitcode.com',
 			value: "gitlabUrl",
 		},
@@ -271,20 +271,20 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: '个人访问令牌',
-				description: '在你的 Gitlab 账户中创建 personal access token，并填写到这里。',
+				description: '在你的 GitCode 账户中创建 personal access token，并填写到这里。',
 				placeholder: 'Token',
 				value: "gitlabToken"
 			},
 			{
-				title: '模板文件',
-				description: '作为模板使用的 Obsidian 笔记路径。',
+				title: '兼容模式模板文件',
+				description: '仅供旧兼容导入流程使用的 Obsidian 模板笔记路径。',
 				placeholder: 'your-template-file.md',
 				value: "templateFile"
 			},
 			{
 				title: "输出目录",
-				description: '用于写入输出文件的 Obsidian 文件夹路径。',
-				placeholder: "IssueTracker",
+				description: '生成 issue、元数据和报告的根目录。',
+				placeholder: "GitCode Issues",
 				value: "outputDir",
 				modifier: "normalizePath"
 			},
@@ -341,34 +341,34 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: "Issues 过滤条件",
-				description: '用于筛选 issues 的查询字符串。',
+				description: '附加到 GitCode issue 列表接口后的原始查询字符串。',
 				placeholder: '',
 				value: 'issueFilter'
 			}
 		],
 		dropdowns: [{
 			title: '刷新频率',
-			description: "拉取 Gitlab issues 的时间间隔。",
+			description: "IssueTracker 拉取 GitCode issues 的频率。",
 			options: SHARED_OPTIONS.refreshRates,
 			value: "intervalOfRefresh",
 		},
 			{
-				title: "GitLab 范围",
-				description: "API 请求拉取 issues 时使用的范围。",
+				title: "兼容模式范围",
+				description: "兼容原始单接口导入路径的旧设置。",
 				options: SHARED_OPTIONS.scopeOptionsZh,
 				value: "gitlabIssuesLevel"
 			}
 		],
 		checkBoxInputs: [{
-			title: '清理 Gitlab 中已不存在的 issues？',
+			title: '清理 GitCode 中已不再返回的生成 issue？',
 			value: "purgeIssues",
 		},
 			{
-				title: '在左侧边栏显示刷新 Gitlab issues 图标？',
+				title: '在左侧边栏显示手动同步图标？',
 				value: 'showIcon',
 			},
 			{
-				title: '启动时自动刷新 Gitlab issues？',
+				title: '启动时自动刷新 issues？',
 				value: 'refreshOnStartup'
 			},
 			{
@@ -382,15 +382,15 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 		],
 		getGitlabIssuesLevel: (currentLevel) => {
 			return currentLevel === 'group'
-				? {title: "组织", url: "https://docs.gitlab.com/ee/user/group/#get-the-group-id"}
-				: {title: "项目", url: "https://docs.gitlab.com/ee/user/project/working_with_projects.html#access-the-project-overview-page-by-using-the-project-id"};
+				? {title: "组织", url: "https://docs.gitcode.com/docs/orgs/"}
+				: {title: "仓库", url: "https://docs.gitcode.com/docs/repos/"};
 		},
-		getGitlabIdSettingName: (currentLevelTitle) => `设置 Gitlab ${currentLevelTitle} Id`,
-		getGitlabIdLinkText: (currentLevelTitle) => `查找你的 ${currentLevelTitle} Id。`,
-		moreInformationTitle: '更多信息',
+		getGitlabIdSettingName: (currentLevelTitle) => `设置${currentLevelTitle}标识`,
+		getGitlabIdLinkText: (currentLevelTitle) => `打开 GitCode ${currentLevelTitle}文档。`,
+		moreInformationTitle: '参考文档',
 		gitlabDocumentation: {
-			title: '查看 Gitlab 文档',
-			url: 'https://docs.gitlab.com/ee/api/issues.html#list-issues'
+			title: '查看 GitCode issues API 文档',
+			url: 'https://docs.gitcode.com/docs/repos/issues/'
 		}
 	}
 };

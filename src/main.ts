@@ -1,6 +1,6 @@
 import {addIcon, Notice, Plugin} from 'obsidian';
 import Filesystem from "./filesystem";
-import gitlabIcon from './assets/gitlab-icon.svg';
+import issueTrackerIcon from './assets/issue-tracker-icon.svg';
 import {GitlabIssuesSettingTab} from "./SettingsTab/settings-tab";
 import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
@@ -58,8 +58,8 @@ export default class GitlabIssuesPlugin extends Plugin {
 		if (this.settings.showIcon) {
 			// Ensure we did not already add an icon
 			if (!this.iconAdded) {
-				addIcon("gitlab", gitlabIcon);
-				this.addRibbonIcon('gitlab', 'IssueTracker', (evt: MouseEvent) => {
+				addIcon("issue-tracker", issueTrackerIcon);
+				this.addRibbonIcon('issue-tracker', 'Sync IssueTracker', (evt: MouseEvent) => {
 					this.fetchFromGitlab();
 				});
 				this.iconAdded = true;
@@ -69,8 +69,8 @@ export default class GitlabIssuesPlugin extends Plugin {
 
 	private addCommandToPalette() {
 		this.addCommand({
-			id: 'import-gitlab-issues',
-			name: 'Import IssueTracker',
+			id: 'sync-issue-tracker',
+			name: 'Sync IssueTracker',
 			callback: () => {
 				this.fetchFromGitlab();
 			}

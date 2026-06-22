@@ -1,72 +1,96 @@
 IssueTracker for Obsidian
 ====
 
-A plugin for [Obsidian](https://obsidian.md/) to import and track issues from [GitLab](https://gitlab.com/).
+[中文](README.zh-CN.md)
 
-Each issue returned from Gitlab is created as an Obsidian note in the specified output directory.
+IssueTracker is a local Obsidian plugin workspace for syncing GitCode issues into your vault.
 
-You can create your own template to customise the format of the issue note.
+The current implementation is tailored for a GitCode-based issue workflow and adds structured daily reporting on top of plain issue sync.
 
-Notes are intended to be *READ ONLY*, as they will be removed from your Obsidian vault if they no longer are 
-returned by Gitlab.
+## What It Does
 
-The latest issues are loaded from Gitlab 30 seconds after Obsidian is started, and then automatically every 15 minutes.
+- Sync issues from selected GitCode repositories, or from every repository under a configured organization.
+- Persist each issue as a normalized Obsidian note under `GitCode Issues/issues`.
+- Mark authors as internal or external by combining repository collaborator data with a manual whitelist.
+- Classify issues into `bug`, `requirement`, or `unknown` using configurable prefix, keyword, and label rules.
+- Generate machine-friendly daily reports and AI-friendly daily briefs.
+- Persist sync metadata, degraded-sync warnings, and collaborator caches under `GitCode Issues/meta`.
+
+## Default Output Layout
+
+- `GitCode Issues/issues/*.md`
+- `GitCode Issues/meta/internal-members.json`
+- `GitCode Issues/meta/sync-state.json`
+- `GitCode Issues/reports/daily/YYYY-MM-DD.md`
+- `GitCode Issues/reports/daily-brief/YYYY-MM-DD-brief.md`
+
+## Installation
+
+This repo is set up as a local plugin workspace.
+
+1. Run `npm install` once if dependencies are not installed yet.
+2. Build the plugin with `npm run build`.
+3. Copy these files into your vault plugin directory `.obsidian/plugins/issuetracker/`:
+   - `manifest.json`
+   - `main.js`
+   - `versions.json`
+4. Enable `IssueTracker` in Obsidian.
 
 ## Configuration
 
-You must have a Gitlab account.
+Open the `IssueTracker` settings tab and configure:
 
-1) Generate a Gitlab [Personal Access Token](https://gitlab.com/-/profile/personal_access_tokens) for the plugin that 
-   has `API` scope included.
-2) Install the plugin through the Obsidian Community Plugins section, and then enable it.
-3) Enter the Personal Access Token you created at Gitlab into the Token field in the plugin settings.
+- `GitCode instance URL`: defaults to `https://gitcode.com`
+- `API Base URL`: defaults to `https://gitcode.com/api/v5`
+- `Personal Access Token`: GitCode token used for API requests
+- `Organization Name`: the GitCode organization that owns the repositories
+- `Repository List`: one repository per line when you do not sync the whole organization
+- `Sync all organization repositories`: automatically discover repositories under the configured organization
+- `Internal User Whitelist`: fallback usernames to treat as internal even if collaborator sync is incomplete
+- `Classification Rules`: JSON rules for mapping titles or labels into `bug` / `requirement`
+- `Issues Folder`, `Meta Folder`, `Reports Folder`: output locations inside the vault
+- `Generate daily reports`: write daily summaries and AI briefs after sync
 
-![Plugin Settings Screen](doc/screenshot/gitlab-issues-config-screen.png)
+The settings page still keeps a legacy API-scope compatibility section from the original importer code path. The primary workflow in this fork is the GitCode organization and repository sync described above.
 
-## Example - Listing upcoming deadlines
+## Usage
 
-With the default filter value of `due_date=month`, the Gitlab API will return all issues that have a Due Date in the 
-next month.
+- Click the left-ribbon `IssueTracker` icon to trigger a sync.
+- Or run the command palette action `Sync IssueTracker`.
+- If `Refresh issues on startup` is enabled, the plugin waits 30 seconds after launch before the first automatic sync.
+- Automatic refresh runs every 15 minutes by default.
 
-The plugin will create an Obsidian note file for each issue.
+## Generated Data
 
-You can then use the excellent [DataView Plugin](https://github.com/blacksmithgu/obsidian-dataview) to create lists 
-of upcoming issues to embed anywhere you like in your vault. For example:
+Issue notes are generated artifacts. The current sync flow rewrites normalized issue files and derived reports, so manual edits inside generated notes should be treated as disposable unless you change the output process.
 
-```yaml
-dataview
-TABLE WITHOUT ID file.link AS "Task", dueDate AS "Due Date" from "@Data/GitCode Issues"
-SORT dueDate
+Each normalized issue note includes frontmatter such as:
+
+- `createdAt`
+- `updatedAt`
+- `projectPath`
+- `sourceRepo`
+- `authorUsername`
+- `isInternalAuthor`
+- `requestKind`
+- `requestKindMatchedBy`
+- `labels`
+
+## Dataview Example
+
+```dataview
+TABLE requestKind, isInternalAuthor, authorUsername, sourceRepo
+FROM "GitCode Issues/issues"
+SORT createdAt DESC
 ```
 
-If you then close an issue on Gitlab, or change its due date to be further in the future, the issue will be removed 
-from your vault, and the DataView list will no longer show the issue.
+## API Reference
 
-## Going Further
-
-### Customise the API query
-You can use any valid query filter permitted by Gitlab in the "Issues List" endpoint. See the [Gitlab API 
-Documentation](https://docs.gitlab.com/ee/api/issues.html#list-issues) for all possible options.
-
-### Use a custom template
-You can customise the template used to create the new notes. Create a note for the template, and specify the path 
-to this note in the plugin settings.
-
-The template must be a valid Handlebars template. See the [Handlebars](https://handlebarsjs.com/guide/) documentation 
-for more information on the syntax.
-
-Currently, the available fields include:
-
-`id` `title` `description` `due_date` `web_url` 
-
-## Bugs
-
-Please report bugs in the repository issue tracker.
-
-## Contributions
-
-Contributions are welcome. Please submit a single PR per bug or feature.
+- [GitCode REST API Guide](https://docs.gitcode.com/en/docs/guide/)
+- [GitCode Repositories API Docs](https://docs.gitcode.com/en/docs/repos/)
+- [GitCode Issues API Docs](https://docs.gitcode.com/en/docs/repos/issues/)
+- [GitCode Organizations API Docs](https://docs.gitcode.com/en/docs/orgs/)
 
 ## License
 
-The plugin code is released under the MIT license. See the [LICENSE](LICENSE.txt) document for more information.
+The plugin code is released under the MIT license. See [LICENSE.txt](LICENSE.txt).

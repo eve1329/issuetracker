@@ -1,21 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
+All notable changes to this local IssueTracker fork are documented in this file.
 
-### [0.1.10](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.9...0.1.10) (2024-05-30)
+## 0.1.10 - 2026-06-22
 
-### [0.1.9](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.8...0.1.9) (2024-01-30)
-
-### [0.1.8](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.7...0.1.8) (2022-11-16)
-
-### [0.1.7](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.6...0.1.7) (2022-11-05)
-
-### [0.1.6](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.5...0.1.6) (2022-11-01)
-
-### [0.1.5](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.4...0.1.5) (2022-11-01)
-
-### [0.1.4](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.3...0.1.4) (2022-10-30)
-
-### [0.1.3](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.1...0.1.3) (2022-10-04)
-
-### [0.1.2](https://github.com/benr77/obsidian-gitlab-issues/compare/0.1.1...0.1.2) (2022-10-04)
+- Repositioned the plugin as a GitCode-focused IssueTracker workspace with reporting and classification.
+- Defaulted configuration to `https://gitcode.com` and `https://gitcode.com/api/v5`.
+- Added GitCode organization and repository sync support.
+- Added collaborator-based internal member matching plus manual whitelist support.
+- Added issue classification rules for `bug`, `requirement`, and `unknown`.
+- Added generated daily reports and AI briefs under `GitCode Issues/reports`.
+- Hardened degraded-sync handling so cached notes and the previous successful sync marker survive partial failures.
+- Updated README and user-facing plugin copy to match the current GitCode workflow.

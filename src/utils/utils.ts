@@ -24,5 +24,5 @@ project: {{references.full}}
 
 {{{description}}}
 
-[View On Gitlab]({{web_url}})
+[Open in GitCode]({{web_url}})
 `;

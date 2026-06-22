@@ -1,7 +1,7 @@
 {
 	"name": "issuetracker",
 	"version": "0.1.10",
-	"description": "Obsidian plugin for issue tracking.",
+	"description": "Obsidian plugin for syncing GitCode issues and daily reports.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -14,7 +14,11 @@
 	"standard-version": {
 		"t": ""
 	},
-	"keywords": [],
+	"keywords": [
+		"obsidian",
+		"gitcode",
+		"issue-tracker"
+	],
 	"author": "ming",
 	"license": "MIT",
 	"devDependencies": {

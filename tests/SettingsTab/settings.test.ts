@@ -183,29 +183,29 @@ describe('settings', () => {
 			},
 		});
 		expect(zhSettings.dropdowns[1]).toEqual({
-			title: 'GitLab 范围',
-			description: 'API 请求拉取 issues 时使用的范围。',
+			title: '兼容模式范围',
+			description: '兼容原始单接口导入路径的旧设置。',
 			options: { personal: '个人', project: '项目', group: '组织' },
 			value: 'gitlabIssuesLevel',
 		});
 		expect(zhSettings.getGitlabIssuesLevel('project')).toEqual({
-			title: '项目',
-			url: 'https://docs.gitlab.com/ee/user/project/working_with_projects.html#access-the-project-overview-page-by-using-the-project-id',
+			title: '仓库',
+			url: 'https://docs.gitcode.com/docs/repos/',
 		});
-		expect(zhSettings.getGitlabIdSettingName('项目')).toBe('设置 Gitlab 项目 Id');
-		expect(zhSettings.getGitlabIdLinkText('项目')).toBe('查找你的 项目 Id。');
-		expect(zhSettings.moreInformationTitle).toBe('更多信息');
+		expect(zhSettings.getGitlabIdSettingName('仓库')).toBe('设置仓库标识');
+		expect(zhSettings.getGitlabIdLinkText('仓库')).toBe('打开 GitCode 仓库文档。');
+		expect(zhSettings.moreInformationTitle).toBe('参考文档');
 		expect(zhSettings.gitlabDocumentation).toEqual({
-			title: '查看 Gitlab 文档',
-			url: 'https://docs.gitlab.com/ee/api/issues.html#list-issues',
+			title: '查看 GitCode issues API 文档',
+			url: 'https://docs.gitcode.com/docs/repos/issues/',
 		});
 	});
 
 	it('should have the correct setting inputs', () => {
 		const expectedSettingInputs = [
 			{
-				title: 'Gitlab instance URL',
-				description: 'Use your own Gitlab instance instead of the public hosted Gitlab.',
+				title: 'GitCode Instance URL',
+				description: 'Base URL for your GitCode instance.',
 				placeholder: 'https://gitcode.com',
 				value: 'gitlabUrl',
 			},
@@ -217,20 +217,20 @@ describe('settings', () => {
 			},
 			{
 				title: 'Personal Access Token',
-				description: 'Create a personal access token in your Gitlab account and enter it here.',
+				description: 'Create a personal access token in your GitCode account and enter it here.',
 				placeholder: 'Token',
 				value: 'gitlabToken',
 			},
 			{
-				title: 'Template File',
-				description: 'Path to an Obsidian note to use as the template.',
+				title: 'Legacy Template File',
+				description: 'Optional Obsidian note path used by the legacy compatibility importer.',
 				placeholder: 'your-template-file.md',
 				value: 'templateFile',
 			},
 			{
 				title: 'Output Folder',
-				description: 'Path to an Obsidian folder to write output files to.',
-				placeholder: 'IssueTracker',
+				description: 'Root folder for generated issue notes, metadata, and reports.',
+				placeholder: 'GitCode Issues',
 				value: 'outputDir',
 				modifier: 'normalizePath',
 			},
@@ -287,7 +287,7 @@ describe('settings', () => {
 			},
 			{
 				title: 'Issues Filter',
-				description: 'The query string used to filter the issues.',
+				description: 'Raw query string appended to GitCode issue list endpoints.',
 				placeholder: '',
 				value: 'issueFilter',
 			},
@@ -311,13 +311,13 @@ describe('settings', () => {
 		const expectedDropdowns = [
 			{
 				title: 'Refresh Rate',
-				description: 'That rate at which gitlab issues will be pulled.',
+				description: 'How often IssueTracker should refresh GitCode issues.',
 				options: { off: 'off', '15': '15', '30': '30', '45': '45', '60': '60', '120': '120' },
 				value: 'intervalOfRefresh',
 			},
 			{
-				title: 'GitLab Scope',
-				description: 'The scope at which the api request will pull.',
+				title: 'Legacy API Scope',
+				description: 'Compatibility mode for the original single-endpoint importer.',
 				options: { personal: 'Personal', project: 'Project', group: 'Group' },
 				value: 'gitlabIssuesLevel',
 			},
@@ -329,15 +329,15 @@ describe('settings', () => {
 	it('should have the correct checkBoxInputs', () => {
 		const expectedCheckBoxInputs = [
 			{
-				title: 'Purge issues that are no longer in Gitlab?',
+				title: 'Purge generated issues that are no longer returned by GitCode?',
 				value: 'purgeIssues',
 			},
 				{
-					title: 'Show refresh Gitlab issues icon in left ribbon?',
+					title: 'Show the manual sync icon in the left ribbon?',
 					value: 'showIcon',
 				},
 				{
-					title: 'Should refresh Gitlab issues on Startup?',
+					title: 'Refresh issues on startup?',
 					value: 'refreshOnStartup',
 				},
 				{
@@ -355,20 +355,20 @@ describe('settings', () => {
 
 	it('should correctly return IssueTracker scope information', () => {
 		expect(settings.getGitlabIssuesLevel('group')).toEqual({
-			title: 'Group',
-			url: 'https://docs.gitlab.com/ee/user/group/#get-the-group-id',
+			title: 'Organization',
+			url: 'https://docs.gitcode.com/en/docs/orgs/',
 		});
 
 		expect(settings.getGitlabIssuesLevel('project')).toEqual({
-			title: 'Project',
-			url: 'https://docs.gitlab.com/ee/user/project/working_with_projects.html#access-the-project-overview-page-by-using-the-project-id',
+			title: 'Repository',
+			url: 'https://docs.gitcode.com/en/docs/repos/',
 		});
 	});
 
 	it('should have the correct Gitlab documentation information', () => {
 		expect(settings.gitlabDocumentation).toEqual({
-			title: 'View the Gitlab documentation',
-			url: 'https://docs.gitlab.com/ee/api/issues.html#list-issues',
+			title: 'View the GitCode issues API documentation',
+			url: 'https://docs.gitcode.com/en/docs/repos/issues/',
 		});
 	});
 });
