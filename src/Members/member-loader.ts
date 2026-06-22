@@ -11,6 +11,7 @@ import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
 
 export default class MemberLoader {
 	private static readonly MAX_REPOS_PER_RUN = 12;
+	private static readonly SUCCESS_REFRESH_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
 	private static readonly FORBIDDEN_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 	private static readonly RATE_LIMIT_RETRY_DELAY_MS = 10 * 60 * 1000;
 	private static readonly ERROR_RETRY_DELAY_MS = 30 * 60 * 1000;
@@ -42,7 +43,7 @@ export default class MemberLoader {
 				repoMembers[repoName] = this.extractRepoUsernames(collaborators);
 				state.status = 'success';
 				state.lastSuccessAt = now.toISOString();
-				state.nextRetryAt = undefined;
+				state.nextRetryAt = new Date(now.getTime() + MemberLoader.SUCCESS_REFRESH_DELAY_MS).toISOString();
 				state.warningMessage = undefined;
 				state.collaboratorCount = repoMembers[repoName].length;
 			} catch (error) {
@@ -95,11 +96,7 @@ export default class MemberLoader {
 		repoSyncState: Record<string, RepoCollaboratorSyncState>,
 		now: Date,
 	) {
-		const syncable = repoNames.filter((repoName) => {
-			const nextRetryAt = repoSyncState[repoName]?.nextRetryAt;
-
-			return !nextRetryAt || new Date(nextRetryAt).getTime() <= now.getTime();
-		});
+		const syncable = repoNames.filter((repoName) => this.shouldSyncRepo(repoSyncState[repoName], now));
 
 		const prioritize = (repoName: string) => {
 			const status = repoSyncState[repoName]?.status;
@@ -127,6 +124,36 @@ export default class MemberLoader {
 				return left.localeCompare(right);
 			})
 			.slice(0, MemberLoader.MAX_REPOS_PER_RUN);
+	}
+
+	private shouldSyncRepo(state: RepoCollaboratorSyncState | undefined, now: Date) {
+		if (!state) {
+			return true;
+		}
+
+		if (state.status === 'success') {
+			return this.isDueAt(this.resolveSuccessRefreshAt(state), now);
+		}
+
+		return this.isDueAt(state.nextRetryAt, now);
+	}
+
+	private resolveSuccessRefreshAt(state: RepoCollaboratorSyncState) {
+		if (state.nextRetryAt) {
+			return state.nextRetryAt;
+		}
+
+		if (!state.lastSuccessAt) {
+			return undefined;
+		}
+
+		return new Date(
+			new Date(state.lastSuccessAt).getTime() + MemberLoader.SUCCESS_REFRESH_DELAY_MS,
+		).toISOString();
+	}
+
+	private isDueAt(timestamp: string | undefined, now: Date) {
+		return !timestamp || new Date(timestamp).getTime() <= now.getTime();
 	}
 
 	private extractRepoUsernames(collaborators: GitCodeMember[]) {

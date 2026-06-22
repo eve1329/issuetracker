@@ -10,6 +10,7 @@ describe('MemberLoader', () => {
 	});
 
 	afterEach(() => {
+		jest.useRealTimers();
 		jest.clearAllMocks();
 	});
 
@@ -84,9 +85,10 @@ describe('MemberLoader', () => {
 		]);
 	});
 
-	it('reuses cached repo members and only fetches a limited batch per run', async () => {
-		mockLoadAllPages
-			.mockResolvedValueOnce([{username: 'repo_b_user'}]);
+	it('skips recently refreshed success repos until their refresh window expires', async () => {
+		jest.useFakeTimers();
+		jest.setSystemTime(new Date('2026-06-18T12:00:00.000Z'));
+		mockLoadAllPages.mockResolvedValueOnce([{username: 'repo_b_user'}]);
 
 		const loader = new MemberLoader({
 			...DEFAULT_SETTINGS,
@@ -121,6 +123,68 @@ describe('MemberLoader', () => {
 			source: 'repo',
 			repo: 'repo-b',
 		});
+		expect(result.index.repoSyncState?.['repo-b']).toEqual(expect.objectContaining({
+			status: 'success',
+			lastSuccessAt: '2026-06-18T12:00:00.000Z',
+			nextRetryAt: '2026-06-25T12:00:00.000Z',
+		}));
+		expect(result.index.syncProgress).toEqual(expect.objectContaining({
+			totalRepos: 3,
+			successRepoCount: 2,
+			forbiddenRepoCount: 1,
+			errorRepoCount: 0,
+			pendingRepoCount: 0,
+			cachedRepoCount: 2,
+			attemptedReposThisRun: ['repo-b'],
+		}));
+		expect(mockLoadAllPages).toHaveBeenCalledTimes(1);
+		expect(mockLoadAllPages).toHaveBeenNthCalledWith(
+			1,
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-b/collaborators',
+			'',
+		);
+	});
+
+	it('retries stale success repos and keeps cached repo members if the refresh fails', async () => {
+		jest.useFakeTimers();
+		jest.setSystemTime(new Date('2026-06-18T12:00:00.000Z'));
+		mockLoadAllPages
+			.mockResolvedValueOnce([{username: 'repo_b_user'}])
+			.mockRejectedValueOnce(new Error('500 Server Error'));
+
+		const loader = new MemberLoader({
+			...DEFAULT_SETTINGS,
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a', 'repo-b', 'repo-c'],
+			internalUserWhitelist: [],
+		});
+
+		const result = await loader.loadInternalMemberIndex(
+			['repo-a', 'repo-b', 'repo-c'],
+			{
+				usernames: {
+					repo_a_user: {username: 'repo_a_user', source: 'repo', repo: 'repo-a'},
+				},
+				repoMembers: {
+					'repo-a': ['repo_a_user'],
+				},
+				repoSyncState: {
+					'repo-a': {status: 'success', lastSuccessAt: '2026-06-01T00:00:00.000Z'},
+					'repo-c': {status: 'forbidden', nextRetryAt: '2999-01-01T00:00:00.000Z'},
+				},
+			},
+		);
+
+		expect(result.index.usernames.repo_a_user).toEqual({
+			username: 'repo_a_user',
+			source: 'repo',
+			repo: 'repo-a',
+		});
+		expect(result.index.usernames.repo_b_user).toEqual({
+			username: 'repo_b_user',
+			source: 'repo',
+			repo: 'repo-b',
+		});
 		expect(result.index.syncProgress).toEqual(expect.objectContaining({
 			totalRepos: 3,
 			successRepoCount: 1,
@@ -130,6 +194,9 @@ describe('MemberLoader', () => {
 			cachedRepoCount: 2,
 			attemptedReposThisRun: ['repo-b', 'repo-a'],
 		}));
+		expect(result.warningMessages).toEqual([
+			'Failed to sync repo collaborators for repo-a: 500 Server Error',
+		]);
 		expect(mockLoadAllPages).toHaveBeenCalledTimes(2);
 	});
 
