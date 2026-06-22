@@ -1,6 +1,6 @@
 {
 	"name": "issuetracker",
-	"version": "0.1.10",
+	"version": "0.1.11",
 	"description": "Obsidian plugin for syncing GitCode issues and daily reports.",
 	"main": "main.js",
 	"scripts": {

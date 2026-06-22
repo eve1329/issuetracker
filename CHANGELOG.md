@@ -2,6 +2,11 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.1.11 - 2026-06-22
+
+- Republished the release on a fresh version number so Obsidian Community can rescan against a new GitHub tag.
+- Kept the GitHub release workflow aligned with plain semantic tags and the required downloadable assets.
+
 ## 0.1.10 - 2026-06-22
 
 - Repositioned the plugin as a GitCode-focused IssueTracker workspace with reporting and classification.
