@@ -1,11 +1,7 @@
-Gitlab Issues for Obsidian
+IssueTracker for Obsidian
 ====
 
-![CI](https://github.com/benr77/obsidian-gitlab-issues/actions/workflows/ci.yml/badge.svg)
-![Build Status](https://github.com/benr77/obsidian-gitlab-issues/actions/workflows/releases.yml/badge.svg)
-[![Github All Releases](https://img.shields.io/github/downloads/benr77/obsidian-gitlab-issues/total.svg)]()
-
-A plugin for [Obsidian](https://obsidian.md/) to import issues from [Gitlab](https://gitlab.com/).
+A plugin for [Obsidian](https://obsidian.md/) to import and track issues from [GitLab](https://gitlab.com/).
 
 Each issue returned from Gitlab is created as an Obsidian note in the specified output directory.
 
@@ -39,7 +35,7 @@ of upcoming issues to embed anywhere you like in your vault. For example:
 
 ```yaml
 dataview
-TABLE WITHOUT ID file.link AS "Task", dueDate AS "Due Date" from "@Data/Gitlab Issues"
+TABLE WITHOUT ID file.link AS "Task", dueDate AS "Due Date" from "@Data/GitCode Issues"
 SORT dueDate
 ```
 
@@ -65,7 +61,7 @@ Currently, the available fields include:
 
 ## Bugs
 
-Please report bugs right here in the repository [issues](https://github.com/benr77/obsidian-gitlab-issues/issues) section.
+Please report bugs in the repository issue tracker.
 
 ## Contributions
 

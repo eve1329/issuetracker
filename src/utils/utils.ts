@@ -6,7 +6,7 @@ export function sanitizeFileName(value: string) {
 
 export function logger(message: string) {
 
-	const pluginNamePrefix = 'Gitlab Issues: ';
+	const pluginNamePrefix = 'IssueTracker: ';
 
 	console.log(pluginNamePrefix + message);
 }

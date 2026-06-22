@@ -35,7 +35,7 @@ const mockSettings: GitlabIssuesSettings = normalizeSettings({
 		labels: {},
 	},
 	templateFile: 'template.md',
-	outputDir: '/Gitlab Issues/',
+	outputDir: '/IssueTracker/',
 	issuesFolder: 'GitCode Issues/issues',
 	metaFolder: 'GitCode Issues/meta',
 	reportsFolder: 'GitCode Issues/reports',

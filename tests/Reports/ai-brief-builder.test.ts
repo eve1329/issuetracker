@@ -2,7 +2,7 @@ import {buildAiBriefMarkdown} from "../../src/Reports/ai-brief-builder";
 import {DailyReport} from "../../src/Reports/daily-report-builder";
 
 describe('buildAiBriefMarkdown', () => {
-	it('renders a markdown brief with summary, partner focus, issues, and AI notes', () => {
+	it('renders a markdown brief with summary, partner focus, and issue sections', () => {
 		const markdown = buildAiBriefMarkdown({
 			date: '2026-06-17',
 			newBugCount: 1,
@@ -37,9 +37,7 @@ describe('buildAiBriefMarkdown', () => {
 		expect(markdown).toContain('repo-a #78: [BUG] 登录失败');
 		expect(markdown).toContain('## New Requirements');
 		expect(markdown).toContain('repo-b #15: [需求] 增加导出');
-		expect(markdown).toContain('## Notes For AI');
-		expect(markdown).toContain('- Highlight the main issue categories by volume');
-		expect(markdown).toContain('- Mention unknown classifications if count > 0');
+		expect(markdown).not.toContain('## Notes For AI');
 	});
 
 	it('leaves empty sections blank instead of inserting fake none bullets', () => {

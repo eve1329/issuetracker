@@ -130,7 +130,7 @@ describe('settings', () => {
 	});
 
 	it('should have the correct title', () => {
-		expect(settings.title).toBe('GitLab Issues Configuration');
+		expect(settings.title).toBe('IssueTracker Configuration');
 	});
 
 	it('defaults uiLanguage to English', () => {
@@ -140,7 +140,7 @@ describe('settings', () => {
 	it('returns Chinese settings copy when requested', () => {
 		const zhSettings = getSettingsUi('zh-CN');
 
-		expect(zhSettings.title).toBe('GitLab Issues 配置');
+		expect(zhSettings.title).toBe('IssueTracker 配置');
 		expect(zhSettings.languageSetting).toEqual({
 			title: '界面语言',
 			description: '选择当前设置页的显示语言。',
@@ -197,7 +197,7 @@ describe('settings', () => {
 			{
 				title: 'Output Folder',
 				description: 'Path to an Obsidian folder to write output files to.',
-				placeholder: 'Gitlab Issues',
+				placeholder: 'IssueTracker',
 				value: 'outputDir',
 				modifier: 'normalizePath',
 			},
@@ -320,7 +320,7 @@ describe('settings', () => {
 		expect(settings.checkBoxInputs).toEqual(expectedCheckBoxInputs);
 	});
 
-	it('should correctly return Gitlab Issues Level information', () => {
+	it('should correctly return IssueTracker scope information', () => {
 		expect(settings.getGitlabIssuesLevel('group')).toEqual({
 			title: 'Group',
 			url: 'https://docs.gitlab.com/ee/user/group/#get-the-group-id',

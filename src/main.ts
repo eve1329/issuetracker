@@ -59,7 +59,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 			// Ensure we did not already add an icon
 			if (!this.iconAdded) {
 				addIcon("gitlab", gitlabIcon);
-				this.addRibbonIcon('gitlab', 'Gitlab Issues', (evt: MouseEvent) => {
+				this.addRibbonIcon('gitlab', 'IssueTracker', (evt: MouseEvent) => {
 					this.fetchFromGitlab();
 				});
 				this.iconAdded = true;
@@ -70,7 +70,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 	private addCommandToPalette() {
 		this.addCommand({
 			id: 'import-gitlab-issues',
-			name: 'Import Gitlab Issues',
+			name: 'Import IssueTracker',
 			callback: () => {
 				this.fetchFromGitlab();
 			}

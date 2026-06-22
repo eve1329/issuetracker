@@ -31,11 +31,5 @@ export function buildAiBriefMarkdown(report: DailyReport): string {
 		'## Unknown Classification',
 		...unknownIssues,
 		'',
-		'## Notes For AI',
-		'- Highlight the main issue categories by volume',
-		'- Call out which repos received the most external feedback',
-		'- Mention repeated themes when visible from titles',
-		'- Mention unknown classifications if count > 0',
-		'',
 	].join('\n');
 }

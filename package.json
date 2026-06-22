@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-gitlab-issues",
+	"name": "issuetracker",
 	"version": "0.1.10",
-	"description": "Obsidian plugin to import issues from GitLab.",
+	"description": "Obsidian plugin for issue tracking.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -15,7 +15,7 @@
 		"t": ""
 	},
 	"keywords": [],
-	"author": "",
+	"author": "ming",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/jest": "^29.2.3",

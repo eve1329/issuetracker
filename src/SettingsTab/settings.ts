@@ -82,7 +82,7 @@ const SHARED_OPTIONS = {
 
 const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 	en: {
-		title: 'GitLab Issues Configuration',
+		title: 'IssueTracker Configuration',
 		languageSetting: {
 			title: 'Interface Language',
 			description: 'Choose the display language for this settings page.',
@@ -118,7 +118,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			{
 				title: "Output Folder",
 				description: 'Path to an Obsidian folder to write output files to.',
-				placeholder: "Gitlab Issues",
+				placeholder: "IssueTracker",
 				value: "outputDir",
 				modifier: "normalizePath"
 			},
@@ -228,7 +228,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 		}
 	},
 	'zh-CN': {
-		title: 'GitLab Issues 配置',
+		title: 'IssueTracker 配置',
 		languageSetting: {
 			title: '界面语言',
 			description: '选择当前设置页的显示语言。',
@@ -264,7 +264,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			{
 				title: "输出目录",
 				description: '用于写入输出文件的 Obsidian 文件夹路径。',
-				placeholder: "Gitlab Issues",
+				placeholder: "IssueTracker",
 				value: "outputDir",
 				modifier: "normalizePath"
 			},
