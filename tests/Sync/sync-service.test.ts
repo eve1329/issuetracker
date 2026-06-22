@@ -16,6 +16,7 @@ const mockUpsertTextFile = jest.fn();
 const mockReadJson = jest.fn();
 const mockReadIssueNotes = jest.fn();
 const mockPurgeIssueNotes = jest.fn();
+const mockListMarkdownFileBasenames = jest.fn();
 const mockLoadRepoIssues = jest.fn();
 const mockLoadInternalMemberIndex = jest.fn();
 const mockResolveRepoNames = jest.fn();
@@ -28,6 +29,7 @@ jest.spyOn(FilesystemModule, "default").mockImplementation(() => ({
 	readJson: mockReadJson,
 	readIssueNotes: mockReadIssueNotes,
 	purgeIssueNotes: mockPurgeIssueNotes,
+	listMarkdownFileBasenames: mockListMarkdownFileBasenames,
 }) as any);
 
 jest.spyOn(GitlabLoaderModule, "default").mockImplementation(() => ({
@@ -197,6 +199,7 @@ describe('SyncService', () => {
 		mockReadJson.mockReset();
 		mockReadIssueNotes.mockReset();
 		mockPurgeIssueNotes.mockReset();
+		mockListMarkdownFileBasenames.mockReset();
 		mockLoadRepoIssues.mockReset();
 		mockLoadInternalMemberIndex.mockReset();
 		mockResolveRepoNames.mockReset();
@@ -207,6 +210,7 @@ describe('SyncService', () => {
 		mockReadJson.mockResolvedValue(null);
 		mockReadIssueNotes.mockResolvedValue([]);
 		mockPurgeIssueNotes.mockResolvedValue(undefined);
+		mockListMarkdownFileBasenames.mockResolvedValue([]);
 		mockLoadInternalMemberIndex.mockResolvedValue(makeInternalMemberLoadResult());
 		mockResolveRepoNames.mockImplementation(async () => ['repo-a']);
 	});
@@ -547,6 +551,185 @@ describe('SyncService', () => {
 			1,
 			'GitCode Issues/reports/daily/2026-06-17.md',
 			expect.stringContaining('- repo-a #15: [需求] 持久化日报条目'),
+		);
+	});
+
+	it('backfills missing daily reports after the last successful sync date', async () => {
+		jest.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+		const settings = makeSettings({repoList: ['docs']});
+		mockResolveRepoNames.mockResolvedValueOnce(['docs']);
+		mockReadJson.mockResolvedValueOnce({
+			syncStatus: 'success',
+			failedRepos: [],
+			lastSuccessfulSyncAt: '2026-06-18T12:00:00.000Z',
+		});
+		mockLoadRepoIssues.mockResolvedValueOnce([]);
+		mockReadIssueNotes.mockResolvedValueOnce([
+			{
+				id: 4102400,
+				iid: 80,
+				title: 'androidx.room3适配了但是没发布room-compiler',
+				state: 'open',
+				createdAt: '2026-06-19T09:30:00+08:00',
+				updatedAt: '2026-06-19T09:30:00+08:00',
+				webUrl: 'https://gitcode.com/CPF-KMP-CMP/docs/issues/80',
+				projectId: 9384224,
+				projectPath: 'CPF-KMP-CMP/docs',
+				sourceScope: 'project',
+				sourceRepo: 'docs',
+				authorUsername: 'partner_a',
+				authorName: 'Partner A',
+				isInternalAuthor: false,
+				internalMatchedBy: 'none',
+				labels: [],
+				issueTypeRaw: 'issue',
+				requestKind: 'unknown',
+				requestKindMatchedBy: 'none',
+				referencesFull: 'CPF-KMP-CMP/docs#80',
+			},
+		]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(8);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			1,
+			'GitCode Issues/reports/daily/2026-06-19.md',
+			expect.stringContaining('- docs #80: androidx.room3适配了但是没发布room-compiler'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			2,
+			'GitCode Issues/reports/daily-brief/2026-06-19-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-19'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			3,
+			'GitCode Issues/reports/daily/2026-06-20.md',
+			expect.stringContaining('newIssueCount: 0'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			4,
+			'GitCode Issues/reports/daily-brief/2026-06-20-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-20'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			5,
+			'GitCode Issues/reports/daily/2026-06-21.md',
+			expect.stringContaining('newRequirementCount: 0'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			6,
+			'GitCode Issues/reports/daily-brief/2026-06-21-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-21'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			7,
+			'GitCode Issues/reports/daily/2026-06-22.md',
+			expect.stringContaining('unknownClassifications: 0'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			8,
+			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-22'),
+		);
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				syncStatus: 'success',
+				lastSuccessfulSyncAt: '2026-06-22T12:00:00.000Z',
+			}),
+		);
+	});
+
+	it('repairs recent missing report dates even after sync-state already advanced', async () => {
+		jest.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
+		const settings = makeSettings({repoList: ['docs']});
+		mockResolveRepoNames.mockResolvedValueOnce(['docs']);
+		mockReadJson.mockResolvedValueOnce({
+			syncStatus: 'success',
+			failedRepos: [],
+			lastSuccessfulSyncAt: '2026-06-22T03:25:09.683Z',
+		});
+		mockLoadRepoIssues.mockResolvedValueOnce([]);
+		mockReadIssueNotes.mockResolvedValueOnce([
+			{
+				id: 4102400,
+				iid: 80,
+				title: 'androidx.room3适配了但是没发布room-compiler',
+				state: 'open',
+				createdAt: '2026-06-19T13:29:29+08:00',
+				updatedAt: '2026-06-19T13:29:29+08:00',
+				webUrl: 'https://gitcode.com/CPF-KMP-CMP/docs/issues/80',
+				projectId: 9384224,
+				projectPath: 'CPF-KMP-CMP/docs',
+				sourceScope: 'project',
+				sourceRepo: 'docs',
+				authorUsername: 'partner_a',
+				authorName: 'Partner A',
+				isInternalAuthor: false,
+				internalMatchedBy: 'none',
+				labels: [],
+				issueTypeRaw: 'issue',
+				requestKind: 'unknown',
+				requestKindMatchedBy: 'none',
+				referencesFull: 'CPF-KMP-CMP/docs#80',
+			},
+		]);
+		mockListMarkdownFileBasenames
+			.mockResolvedValueOnce(['2026-06-17', '2026-06-18', '2026-06-22'])
+			.mockResolvedValueOnce(['2026-06-17', '2026-06-18', '2026-06-22']);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockListMarkdownFileBasenames).toHaveBeenNthCalledWith(1, 'GitCode Issues/reports/daily');
+		expect(mockListMarkdownFileBasenames).toHaveBeenNthCalledWith(2, 'GitCode Issues/reports/daily-brief');
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			1,
+			'GitCode Issues/reports/daily/2026-06-19.md',
+			expect.stringContaining('- docs #80: androidx.room3适配了但是没发布room-compiler'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			2,
+			'GitCode Issues/reports/daily-brief/2026-06-19-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-19'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			3,
+			'GitCode Issues/reports/daily/2026-06-20.md',
+			expect.stringContaining('newIssueCount: 0'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			4,
+			'GitCode Issues/reports/daily-brief/2026-06-20-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-20'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			5,
+			'GitCode Issues/reports/daily/2026-06-21.md',
+			expect.stringContaining('newRequirementCount: 0'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			6,
+			'GitCode Issues/reports/daily-brief/2026-06-21-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-21'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			7,
+			'GitCode Issues/reports/daily/2026-06-22.md',
+			expect.stringContaining('unknownClassifications: 0'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			8,
+			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
+			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-22'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(8);
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				syncStatus: 'success',
+				lastSuccessfulSyncAt: '2026-06-22T12:00:00.000Z',
+			}),
 		);
 	});
 

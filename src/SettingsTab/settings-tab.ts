@@ -1,6 +1,6 @@
 import {App, normalizePath, PluginSettingTab, Setting} from "obsidian";
 import GitlabIssuesPlugin from "../main";
-import {settings} from "./settings";
+import {getSettingsUi} from "./settings";
 import {GitlabIssuesLevel, GitlabRefreshInterval} from "./settings-types";
 
 
@@ -15,10 +15,34 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 	display(): void {
 		const {containerEl} = this;
 
-		const {settingInputs, dropdowns, checkBoxInputs, gitlabDocumentation, getGitlabIssuesLevel, title} = settings;
+		const currentUi = getSettingsUi(this.plugin.settings.uiLanguage);
+		const {
+			title,
+			languageSetting,
+			settingInputs,
+			dropdowns,
+			checkBoxInputs,
+			gitlabDocumentation,
+			getGitlabIssuesLevel,
+			getGitlabIdLinkText,
+			getGitlabIdSettingName,
+			moreInformationTitle
+		} = currentUi;
 
 		containerEl.empty();
 		containerEl.createEl('h2', {text: title});
+
+		new Setting(containerEl)
+			.setName(languageSetting.title)
+			.setDesc(languageSetting.description)
+			.addDropdown(dropdown => dropdown
+				.addOptions(languageSetting.options)
+				.setValue(this.plugin.settings.uiLanguage)
+				.onChange(async (value) => {
+					this.plugin.settings.uiLanguage = value as typeof this.plugin.settings.uiLanguage;
+					await this.plugin.saveSettings();
+					this.display();
+				}));
 
 		settingInputs.forEach((setting) => {
 			const handleSetValue = (): string => {
@@ -105,13 +129,13 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 			const descriptionDocumentFragment = document.createDocumentFragment();
 			const descriptionLinkElement = descriptionDocumentFragment.createEl('a', {
 				href: gitlabIssuesLevelIdObject.url,
-				text: `Find your ${gitlabIssuesLevelIdObject.title} Id.`,
+				text: getGitlabIdLinkText(gitlabIssuesLevelIdObject.title),
 				title: `Goto ${gitlabIssuesLevelIdObject.url}`
 			});
 			descriptionDocumentFragment.appendChild(descriptionLinkElement);
 
 			new Setting(containerEl)
-				.setName(`Set Gitlab ${gitlabIssuesLevelIdObject.title} Id`)
+				.setName(getGitlabIdSettingName(gitlabIssuesLevelIdObject.title))
 				.setDesc(descriptionDocumentFragment)
 				.addText(value => value
 					.setValue(this.plugin.settings.gitlabAppId)
@@ -128,10 +152,10 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings[checkboxSetting.value] = value;
 						await this.plugin.saveSettings();
-					}));
+				}));
 		});
 
-		containerEl.createEl('h3', {text: 'More Information'});
+		containerEl.createEl('h3', {text: moreInformationTitle});
 		containerEl.createEl('a', {
 			text: gitlabDocumentation.title,
 			href: gitlabDocumentation.url

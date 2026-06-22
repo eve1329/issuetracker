@@ -1,11 +1,12 @@
 import {GitlabIssuesSettings} from "../../src/SettingsTab/settings-types";
-import {DEFAULT_SETTINGS, normalizeSettings, settings} from "../../src/SettingsTab/settings";
+import {DEFAULT_SETTINGS, getSettingsUi, normalizeSettings, settings} from "../../src/SettingsTab/settings";
 
 describe('DEFAULT_SETTINGS', () => {
 	it('should have the correct default values', () => {
 		const expectedDefaults: Omit<GitlabIssuesSettings, 'gitlabApiUrl'> = {
 			gitlabUrl: 'https://gitcode.com',
 			gitlabToken: '',
+			uiLanguage: 'en',
 			gitlabIssuesLevel: 'personal',
 			apiBaseUrl: 'https://gitcode.com/api/v5',
 			orgName: 'CPF-KMP-CMP',
@@ -132,6 +133,41 @@ describe('settings', () => {
 		expect(settings.title).toBe('GitLab Issues Configuration');
 	});
 
+	it('defaults uiLanguage to English', () => {
+		expect(DEFAULT_SETTINGS.uiLanguage).toBe('en');
+	});
+
+	it('returns Chinese settings copy when requested', () => {
+		const zhSettings = getSettingsUi('zh-CN');
+
+		expect(zhSettings.title).toBe('GitLab Issues 配置');
+		expect(zhSettings.languageSetting).toEqual({
+			title: '界面语言',
+			description: '选择当前设置页的显示语言。',
+			options: {
+				en: 'English',
+				'zh-CN': '中文',
+			},
+		});
+		expect(zhSettings.dropdowns[1]).toEqual({
+			title: 'GitLab 范围',
+			description: 'API 请求拉取 issues 时使用的范围。',
+			options: { personal: '个人', project: '项目', group: '组织' },
+			value: 'gitlabIssuesLevel',
+		});
+		expect(zhSettings.getGitlabIssuesLevel('project')).toEqual({
+			title: '项目',
+			url: 'https://docs.gitlab.com/ee/user/project/working_with_projects.html#access-the-project-overview-page-by-using-the-project-id',
+		});
+		expect(zhSettings.getGitlabIdSettingName('项目')).toBe('设置 Gitlab 项目 Id');
+		expect(zhSettings.getGitlabIdLinkText('项目')).toBe('查找你的 项目 Id。');
+		expect(zhSettings.moreInformationTitle).toBe('更多信息');
+		expect(zhSettings.gitlabDocumentation).toEqual({
+			title: '查看 Gitlab 文档',
+			url: 'https://docs.gitlab.com/ee/api/issues.html#list-issues',
+		});
+	});
+
 	it('should have the correct setting inputs', () => {
 		const expectedSettingInputs = [
 			{
@@ -225,6 +261,17 @@ describe('settings', () => {
 		];
 
 		expect(settings.settingInputs).toEqual(expectedSettingInputs);
+	});
+
+	it('should expose the language selector config', () => {
+		expect(settings.languageSetting).toEqual({
+			title: 'Interface Language',
+			description: 'Choose the display language for this settings page.',
+			options: {
+				en: 'English',
+				'zh-CN': '中文',
+			},
+		});
 	});
 
 	it('should have the correct dropdowns', () => {

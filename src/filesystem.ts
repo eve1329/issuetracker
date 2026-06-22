@@ -101,6 +101,23 @@ export default class Filesystem {
 		return noteResults.filter((note): note is NormalizedIssueNote => note !== null);
 	}
 
+	public async listMarkdownFileBasenames(folderPath: string): Promise<string[]> {
+		const folder = this.vault.getAbstractFileByPath(folderPath);
+
+		if (!(folder instanceof TFolder)) {
+			return [];
+		}
+
+		const basenames: string[] = [];
+		Vault.recurseChildren(folder, (existingFile: TAbstractFile) => {
+			if (existingFile instanceof TFile && existingFile.extension === 'md') {
+				basenames.push(existingFile.basename);
+			}
+		});
+
+		return basenames;
+	}
+
 	public async purgeIssueNotes(repoNames?: string[]) {
 		const issueFolder = this.vault.getAbstractFileByPath(this.settings.issuesFolder);
 

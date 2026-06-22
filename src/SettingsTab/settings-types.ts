@@ -1,6 +1,7 @@
 export type GitlabIssuesLevel = 'personal' | 'project' | 'group';
 export type GitlabRefreshInterval = "15" | "30" | "45" |"60" | "120" | "off";
 export type RequestKind = 'bug' | 'requirement' | 'unknown';
+export type UiLanguage = 'en' | 'zh-CN';
 
 export interface ClassificationRules {
 	titlePrefixes: Record<string, Exclude<RequestKind, 'unknown'>>;
@@ -12,6 +13,7 @@ export interface GitlabIssuesSettings {
 	gitlabUrl: string;
 	apiBaseUrl: string;
 	gitlabToken: string;
+	uiLanguage: UiLanguage;
 	gitlabIssuesLevel: GitlabIssuesLevel;
 	orgName: string;
 	repoList: string[];
@@ -37,6 +39,9 @@ export interface GitlabIssuesSettings {
 export interface SettingOutLink {
 	url: string;
 	title: string;
+}
+export interface LanguageSetting extends Omit<Setting, "placeholder"> {
+	options: Record<UiLanguage, string>;
 }
 export interface Setting {
 	title: string,
@@ -73,9 +78,13 @@ export interface SettingCheckboxInput extends Omit<Setting, "description"> {
 
 export interface SettingsTab {
 	title: string,
+	languageSetting: LanguageSetting,
 	settingInputs: SettingInput[],
 	dropdowns: DropdownInputs[]
 	checkBoxInputs: SettingCheckboxInput[],
 	getGitlabIssuesLevel: (currentLevel: Omit<GitlabIssuesLevel, "personal">) => SettingOutLink;
+	getGitlabIdSettingName: (currentLevelTitle: string) => string;
+	getGitlabIdLinkText: (currentLevelTitle: string) => string;
+	moreInformationTitle: string;
 	gitlabDocumentation: SettingOutLink
 }

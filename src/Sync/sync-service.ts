@@ -22,6 +22,8 @@ interface SyncState {
 }
 
 export default class SyncService {
+	private static readonly RECENT_REPORT_REPAIR_DAYS = 7;
+
 	private readonly fs: Filesystem;
 	private readonly loader: GitlabLoader;
 	private readonly memberLoader: MemberLoader;
@@ -130,17 +132,27 @@ export default class SyncService {
 				const provisionalStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded' || repositorySyncStatus === 'degraded'
 					? 'degraded'
 					: 'success';
-				const report = buildDailyReport(reportDate, persistedNotes);
-				report.syncStatus = provisionalStatus;
+				const reportDates = await this.resolveReportDatesToWrite(
+					previousSyncState?.lastSuccessfulSyncAt,
+					syncTime,
+					reportDate,
+					dailyReportsFolder,
+					dailyBriefsFolder,
+				);
 
-				await this.fs.upsertTextFile(
-					`${dailyReportsFolder}/${reportDate}.md`,
-					buildDailyReportMarkdown(report),
-				);
-				await this.fs.upsertTextFile(
-					`${dailyBriefsFolder}/${reportDate}-brief.md`,
-					buildAiBriefMarkdown(report),
-				);
+				for (const date of reportDates) {
+					const report = buildDailyReport(date, persistedNotes);
+					report.syncStatus = provisionalStatus;
+
+					await this.fs.upsertTextFile(
+						`${dailyReportsFolder}/${date}.md`,
+						buildDailyReportMarkdown(report),
+					);
+					await this.fs.upsertTextFile(
+						`${dailyBriefsFolder}/${date}-brief.md`,
+						buildAiBriefMarkdown(report),
+					);
+				}
 			} catch (error) {
 				reportWriteFailed = true;
 				const message = `Failed to write reports: ${this.getErrorMessage(error)}`;
@@ -296,5 +308,94 @@ export default class SyncService {
 
 	private getErrorMessage(error: unknown) {
 		return error instanceof Error ? error.message : String(error);
+	}
+
+	private resolveReportDates(previousLastSuccessfulSyncAt: string | null | undefined, syncTime: string, fallbackDate: string) {
+		const currentDate = this.extractUtcDate(syncTime) ?? fallbackDate;
+		const previousDate = this.extractUtcDate(previousLastSuccessfulSyncAt);
+
+		if (!previousDate || previousDate >= currentDate) {
+			return [currentDate];
+		}
+
+		const dates: string[] = [];
+		let cursor = this.addUtcDays(previousDate, 1);
+
+		while (cursor <= currentDate) {
+			dates.push(cursor);
+			cursor = this.addUtcDays(cursor, 1);
+		}
+
+		return dates;
+	}
+
+	private async resolveReportDatesToWrite(
+		previousLastSuccessfulSyncAt: string | null | undefined,
+		syncTime: string,
+		fallbackDate: string,
+		dailyReportsFolder: string,
+		dailyBriefsFolder: string,
+	) {
+		const scheduledDates = this.resolveReportDates(previousLastSuccessfulSyncAt, syncTime, fallbackDate);
+		const currentDate = this.extractUtcDate(syncTime) ?? fallbackDate;
+		const repairDates = await this.resolveMissingRecentReportDates(
+			dailyReportsFolder,
+			dailyBriefsFolder,
+			currentDate,
+		);
+
+		return Array.from(new Set([...scheduledDates, ...repairDates])).sort();
+	}
+
+	private async resolveMissingRecentReportDates(
+		dailyReportsFolder: string,
+		dailyBriefsFolder: string,
+		currentDate: string,
+	) {
+		const dailyDates = new Set(await this.fs.listMarkdownFileBasenames(dailyReportsFolder));
+		const briefDates = new Set(await this.fs.listMarkdownFileBasenames(dailyBriefsFolder));
+		const existingDates = Array.from(new Set([...dailyDates, ...briefDates]))
+			.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+			.sort();
+
+		if (existingDates.length === 0) {
+			return [];
+		}
+
+		const lookbackStartDate = this.addUtcDays(currentDate, -(SyncService.RECENT_REPORT_REPAIR_DAYS - 1));
+		const earliestExistingDate = existingDates[0];
+		const startDate = earliestExistingDate > lookbackStartDate
+			? earliestExistingDate
+			: lookbackStartDate;
+		const missingDates: string[] = [];
+		let cursor = startDate;
+
+		while (cursor <= currentDate) {
+			if (!dailyDates.has(cursor) || !briefDates.has(cursor)) {
+				missingDates.push(cursor);
+			}
+			cursor = this.addUtcDays(cursor, 1);
+		}
+
+		return missingDates;
+	}
+
+	private extractUtcDate(value: string | null | undefined) {
+		if (!value) {
+			return null;
+		}
+
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			return null;
+		}
+
+		return date.toISOString().slice(0, 10);
+	}
+
+	private addUtcDays(dateValue: string, days: number) {
+		const date = new Date(`${dateValue}T00:00:00.000Z`);
+		date.setUTCDate(date.getUTCDate() + days);
+		return date.toISOString().slice(0, 10);
 	}
 }
