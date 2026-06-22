@@ -237,4 +237,19 @@ describe('classifyIssue', () => {
 			requestKindMatchedBy: 'title-prefix',
 		});
 	});
+
+	it('classifies demo config update titles as requirements', () => {
+		const result = classifyIssue(
+			{
+				title: 'update demo config',
+				labels: [],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+
+		expect(result).toEqual({
+			requestKind: 'requirement',
+			requestKindMatchedBy: 'title-keyword',
+		});
+	});
 });

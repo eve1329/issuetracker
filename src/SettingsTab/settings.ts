@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 			'前移': 'requirement',
 			'下沉': 'requirement',
 			'零侵入': 'requirement',
+			'demo config': 'requirement',
 			'打印模块名称': 'requirement',
 			'自动化测试脚本': 'requirement',
 		},
