@@ -1,7 +1,7 @@
 IssueTracker for Obsidian
 ====
 
-[中文](README.zh-CN.md)
+[中文](https://github.com/eve1329/issuetracker/blob/main/README.zh-CN.md)
 
 IssueTracker is a local Obsidian plugin workspace for syncing GitCode issues into your vault.
 

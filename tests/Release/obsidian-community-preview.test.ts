@@ -30,6 +30,16 @@ describe('Obsidian Community preview blockers', () => {
 		expect(manifest.description).not.toMatch(/\bObsidian\b/i);
 	});
 
+	it('uses absolute README language-switch links so Community does not resolve them under /plugins/', () => {
+		const englishReadme = readWorkspaceFile('README.md');
+		const chineseReadme = readWorkspaceFile('README.zh-CN.md');
+		const englishLink = englishReadme.match(/\[中文\]\(([^)]+)\)/)?.[1];
+		const chineseLink = chineseReadme.match(/\[English\]\(([^)]+)\)/)?.[1];
+
+		expect(englishLink).toMatch(/^https?:\/\//);
+		expect(chineseLink).toMatch(/^https?:\/\//);
+	});
+
 	it('uses Setting headings instead of manually creating h2/h3 tags', () => {
 		const settingsTabSource = readWorkspaceFile('src/SettingsTab/settings-tab.ts');
 		const headingMatches = settingsTabSource.match(/\.setHeading\(\)/g) ?? [];

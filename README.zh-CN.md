@@ -1,7 +1,7 @@
 IssueTracker for Obsidian
 ====
 
-[English](README.md)
+[English](https://github.com/eve1329/issuetracker/blob/main/README.md)
 
 IssueTracker 是一个本地 Obsidian 插件工作区，用来把 GitCode issue 同步到你的知识库。
 
