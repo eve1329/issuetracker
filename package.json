@@ -1,6 +1,6 @@
 {
 	"name": "issuetracker",
-	"version": "0.1.12",
+	"version": "0.1.13",
 	"description": "Vault plugin for syncing GitCode issues and daily reports.",
 	"main": "main.js",
 	"scripts": {

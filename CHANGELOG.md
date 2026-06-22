@@ -2,6 +2,11 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.1.13 - 2026-06-22
+
+- Raised `minAppVersion` to `0.12.16` so the settings tab matches the Obsidian Community preview requirement for `Setting.setName(...)`.
+- Added a release regression test that keeps the declared minimum version aligned with the settings-tab APIs used by the source.
+
 ## 0.1.12 - 2026-06-22
 
 - Fixed the Obsidian Community preview blockers by removing `Obsidian` branding from the manifest description.
