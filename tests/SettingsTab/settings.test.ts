@@ -18,14 +18,33 @@ describe('DEFAULT_SETTINGS', () => {
 				titlePrefixes: {
 					'[BUG]': 'bug',
 					'[需求]': 'requirement',
+					'[feature]': 'requirement',
 				},
 				titleKeywords: {
 					'添加': 'requirement',
 					'手册': 'requirement',
 					'示例': 'requirement',
 					'支持': 'requirement',
+					'support': 'requirement',
+					'adapt': 'requirement',
+					'改用': 'requirement',
+					'替换': 'requirement',
 					'适配': 'requirement',
 					'替代': 'requirement',
+					'前移': 'requirement',
+					'下沉': 'requirement',
+					'零侵入': 'requirement',
+					'打印模块名称': 'requirement',
+					'自动化测试脚本': 'requirement',
+					'fix:': 'bug',
+					'fix(': 'bug',
+					'failed': 'bug',
+					'报错': 'bug',
+					'失败': 'bug',
+					'闪退': 'bug',
+					'崩溃': 'bug',
+					'体积偏大': 'bug',
+					'UAF': 'bug',
 				},
 				labels: {},
 			},
@@ -68,7 +87,12 @@ describe('DEFAULT_SETTINGS', () => {
 		expect(DEFAULT_SETTINGS.classificationRules.labels).toEqual({});
 		expect(DEFAULT_SETTINGS.classificationRules.titleKeywords).toMatchObject({
 			'添加': 'requirement',
-			'手册': 'requirement',
+			'前移': 'requirement',
+			'自动化测试脚本': 'requirement',
+			'support': 'requirement',
+			'fix:': 'bug',
+			'fix(': 'bug',
+			'崩溃': 'bug',
 		});
 	});
 });
@@ -118,6 +142,7 @@ describe('settings', () => {
 		expect(normalized.classificationRules.titlePrefixes).toEqual({
 			'[BUG]': 'bug',
 			'[需求]': 'requirement',
+			'[feature]': 'requirement',
 			'[Task]': 'requirement',
 		});
 		expect(normalized.classificationRules.labels).toEqual({
@@ -125,7 +150,12 @@ describe('settings', () => {
 		});
 		expect(normalized.classificationRules.titleKeywords).toMatchObject({
 			'添加': 'requirement',
-			'手册': 'requirement',
+			'前移': 'requirement',
+			'自动化测试脚本': 'requirement',
+			'support': 'requirement',
+			'fix:': 'bug',
+			'fix(': 'bug',
+			'崩溃': 'bug',
 		});
 	});
 
