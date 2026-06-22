@@ -554,6 +554,63 @@ describe('SyncService', () => {
 		);
 	});
 
+	it('preserves manually corrected classifications when the source issue still remains unknown', async () => {
+		const settings = makeSettings({repoList: ['repo-a']});
+		mockResolveRepoNames.mockResolvedValueOnce(['repo-a']);
+		mockLoadRepoIssues.mockResolvedValueOnce([
+			makeIssue({
+				iid: 81,
+				title: '没有前缀的标题',
+				web_url: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/81',
+				references: {
+					short: '#81',
+					relative: '#81',
+					full: 'CPF-KMP-CMP/repo-a#81',
+				},
+				labels: [],
+			}),
+		]);
+		mockReadIssueNotes.mockResolvedValueOnce([
+			{
+				id: 222,
+				iid: 81,
+				title: '没有前缀的标题',
+				state: 'opened',
+				createdAt: '2026-06-17T07:00:00+08:00',
+				updatedAt: '2026-06-17T07:00:00+08:00',
+				webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/81',
+				projectId: 1001,
+				projectPath: 'CPF-KMP-CMP/repo-a',
+				sourceScope: 'project',
+				sourceRepo: 'repo-a',
+				authorUsername: 'partner_a',
+				authorName: 'Partner A',
+				isInternalAuthor: false,
+				internalMatchedBy: 'none',
+				labels: [],
+				issueTypeRaw: 'issue',
+				requestKind: 'requirement',
+				requestKindMatchedBy: 'title-keyword',
+				referencesFull: 'CPF-KMP-CMP/repo-a#81',
+			},
+		]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockReadIssueNotes).toHaveBeenCalledWith();
+		expect(mockWriteIssueNotes).toHaveBeenCalledWith([
+			expect.objectContaining({
+				iid: 81,
+				requestKind: 'requirement',
+				requestKindMatchedBy: 'title-keyword',
+			}),
+		]);
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
+			'GitCode Issues/reports/daily-brief/2026-06-17-brief.md',
+			expect.not.stringContaining('## Unknown Classification'),
+		);
+	});
+
 	it('backfills missing daily reports after the last successful sync date', async () => {
 		jest.setSystemTime(new Date('2026-06-22T12:00:00.000Z'));
 		const settings = makeSettings({repoList: ['docs']});

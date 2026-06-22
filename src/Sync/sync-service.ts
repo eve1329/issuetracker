@@ -81,22 +81,41 @@ export default class SyncService {
 		}
 
 		const normalizedNotes: NormalizedIssueNote[] = [];
+		const repoIssueBatches: Array<{repoName: string; issues: Issue[]}> = [];
 		const failedRepos: string[] = [];
 		const failedRepoSet = new Set<string>();
 		let issueStorageFailed = false;
+		let hasUnknownClassifications = false;
 
 		for (const repoName of repoNames) {
 			try {
 				const repoIssues = await this.loader.loadRepoIssues(repoName);
-				normalizedNotes.push(
-					...repoIssues.map((issue) => this.normalizeIssue(issue, repoName, internalMembers)),
-				);
+				repoIssueBatches.push({repoName, issues: repoIssues});
+				if (!hasUnknownClassifications) {
+					hasUnknownClassifications = repoIssues.some((issue) => (
+						classifyIssue(issue, this.settings.classificationRules).requestKind === 'unknown'
+					));
+				}
 			} catch (error) {
 				failedRepos.push(repoName);
 				failedRepoSet.add(repoName);
 				logger(`Failed to sync ${repoName}: ${this.getErrorMessage(error)}`);
 				warningMessages.push(`Failed to sync ${repoName}: ${this.getErrorMessage(error)}`);
 			}
+		}
+
+		let existingNotesByKey = new Map<string, NormalizedIssueNote>();
+		if (hasUnknownClassifications) {
+			const existingIssueNotes = await this.fs.readIssueNotes();
+			existingNotesByKey = new Map(
+				existingIssueNotes.map((note) => [this.buildIssueKey(note.sourceRepo, note.iid), note]),
+			);
+		}
+
+		for (const {repoName, issues} of repoIssueBatches) {
+			normalizedNotes.push(
+				...issues.map((issue) => this.normalizeIssue(issue, repoName, internalMembers, existingNotesByKey)),
+			);
 		}
 
 		if (this.settings.purgeIssues) {
@@ -188,6 +207,7 @@ export default class SyncService {
 		issue: Issue,
 		repoName: string,
 		internalMembers: InternalMemberIndex,
+		existingNotesByKey: Map<string, NormalizedIssueNote> = new Map(),
 	): NormalizedIssueNote {
 		const authorUsername = issue.author?.username ?? issue.user?.login ?? '';
 		const authorName = issue.author?.name ?? issue.user?.name ?? '';
@@ -196,6 +216,14 @@ export default class SyncService {
 		const projectId = issue.project_id ?? issue.repository?.id ?? 0;
 		const internalAuthor = matchInternalAuthor(authorUsername, internalMembers);
 		const classification = classifyIssue(issue, this.settings.classificationRules);
+		const issueKey = this.buildIssueKey(repoName, iid);
+		const existingNote = existingNotesByKey.get(issueKey);
+		const requestKind = classification.requestKind === 'unknown' && existingNote && existingNote.requestKind !== 'unknown'
+			? existingNote.requestKind
+			: classification.requestKind;
+		const requestKindMatchedBy = classification.requestKindMatchedBy === 'none' && existingNote && existingNote.requestKind !== 'unknown'
+			? existingNote.requestKindMatchedBy
+			: classification.requestKindMatchedBy;
 
 		return {
 			id: issue.id,
@@ -215,10 +243,14 @@ export default class SyncService {
 			internalMatchedBy: internalAuthor.internalMatchedBy,
 			labels: issue.labels,
 			issueTypeRaw: issue.issue_type,
-			requestKind: classification.requestKind,
-			requestKindMatchedBy: classification.requestKindMatchedBy,
+			requestKind,
+			requestKindMatchedBy,
 			referencesFull: this.resolveReferencesFull(issue, repoName),
 		};
+	}
+
+	private buildIssueKey(repoName: string, iid: number) {
+		return `${repoName}#${iid}`;
 	}
 
 	private resolveReferencesFull(issue: Issue, repoName: string) {

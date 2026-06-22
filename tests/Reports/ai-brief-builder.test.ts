@@ -64,7 +64,7 @@ describe('buildAiBriefMarkdown', () => {
 		expect(markdown).toContain('## External Partner Focus');
 		expect(markdown).toContain('## New Bugs');
 		expect(markdown).toContain('## New Requirements');
-		expect(markdown).toContain('## Unknown Classification');
+		expect(markdown).not.toContain('## Unknown Classification');
 		expect(markdown).not.toContain('- None');
 	});
 

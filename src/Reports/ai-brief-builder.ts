@@ -28,8 +28,8 @@ export function buildAiBriefMarkdown(report: DailyReport): string {
 		'## New Requirements',
 		...report.requirementIssues.map((issue) => `- ${issue.sourceRepo} #${issue.iid}: ${issue.title}`),
 		'',
-		'## Unknown Classification',
-		...unknownIssues,
-		'',
+		...(report.unknownClassifications > 0
+			? ['## Unknown Classification', ...unknownIssues, '']
+			: []),
 	].join('\n');
 }
