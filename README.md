@@ -94,3 +94,7 @@ SORT createdAt DESC
 ## License
 
 The plugin code is released under the MIT license. See [LICENSE.txt](LICENSE.txt).
+
+## Reference
+
+This workspace is adapted from the upstream [obsidian-gitlab-issues](https://github.com/benr77/obsidian-gitlab-issues) plugin and reoriented around a GitCode issue workflow.

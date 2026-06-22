@@ -94,3 +94,7 @@ SORT createdAt DESC
 ## 许可证
 
 插件代码基于 MIT 协议发布。见 [LICENSE.txt](LICENSE.txt)。
+
+## 参考来源
+
+本工作区是在上游 [obsidian-gitlab-issues](https://github.com/benr77/obsidian-gitlab-issues) 插件基础上改造的，并重新聚焦到 GitCode issue 工作流。
