@@ -30,15 +30,18 @@ export default class GitlabIssuesPlugin extends Plugin {
 	}
 
 	scheduleAutomaticRefresh() {
-		if (this.automaticRefresh) {
+		if (this.automaticRefresh !== null) {
 			window.clearInterval(this.automaticRefresh);
+			this.automaticRefresh = null;
 		}
 		if (this.settings.intervalOfRefresh !== "off") {
 			const intervalMinutes = parseInt(this.settings.intervalOfRefresh);
-
-			this.automaticRefresh = this.registerInterval(window.setInterval(() => {
+			const intervalId = window.setInterval(() => {
 				this.fetchFromGitlab();
-			}, intervalMinutes * 60 * 1000)); // every settings interval in minutes
+			}, intervalMinutes * 60 * 1000);
+
+			this.register(() => window.clearInterval(intervalId));
+			this.automaticRefresh = intervalId; // every settings interval in minutes
 		}
 	}
 
@@ -79,13 +82,17 @@ export default class GitlabIssuesPlugin extends Plugin {
 
 	private refreshIssuesAtStartup() {
 		// Clear existing startup timeout
-		if (this.startupTimeout) {
+		if (this.startupTimeout !== null) {
 			window.clearTimeout(this.startupTimeout);
+			this.startupTimeout = null;
 		}
 		if(this.settings.refreshOnStartup) {
-			this.startupTimeout = this.registerInterval(window.setTimeout(() => {
+			const timeoutId = window.setTimeout(() => {
 				this.fetchFromGitlab();
-			}, 30 * 1000)); // after 30 seconds
+			}, 30 * 1000);
+
+			this.register(() => window.clearTimeout(timeoutId));
+			this.startupTimeout = timeoutId; // after 30 seconds
 		}
 	}
 

@@ -2,6 +2,12 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.1.12 - 2026-06-22
+
+- Fixed the Obsidian Community preview blockers by removing `Obsidian` branding from the manifest description.
+- Replaced manual settings-page headings with `Setting(...).setHeading()` for reviewer-compatible UI structure.
+- Preserved the declared `0.12.0` minimum app version by avoiding newer Obsidian APIs in timer cleanup and folder creation paths.
+
 ## 0.1.11 - 2026-06-22
 
 - Republished the release on a fresh version number so Obsidian Community can rescan against a new GitHub tag.

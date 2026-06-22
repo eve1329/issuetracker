@@ -30,7 +30,9 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 		} = currentUi;
 
 		containerEl.empty();
-		containerEl.createEl('h2', {text: title});
+		new Setting(containerEl)
+			.setName(title)
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName(languageSetting.title)
@@ -155,7 +157,9 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 				}));
 		});
 
-		containerEl.createEl('h3', {text: moreInformationTitle});
+		new Setting(containerEl)
+			.setName(moreInformationTitle)
+			.setHeading();
 		containerEl.createEl('a', {
 			text: gitlabDocumentation.title,
 			href: gitlabDocumentation.url

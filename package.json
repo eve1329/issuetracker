@@ -1,7 +1,7 @@
 {
 	"name": "issuetracker",
-	"version": "0.1.11",
-	"description": "Obsidian plugin for syncing GitCode issues and daily reports.",
+	"version": "0.1.12",
+	"description": "Vault plugin for syncing GitCode issues and daily reports.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

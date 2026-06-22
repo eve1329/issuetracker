@@ -189,7 +189,7 @@ export default class Filesystem {
 
 	private async createFolderIfMissing(path: string) {
 		try {
-			await this.vault.createFolder(path);
+			await this.vault.adapter.mkdir(path);
 		} catch (error) {
 			if (error.message !== 'Folder already exists.') {
 				throw error;
