@@ -7,6 +7,10 @@ function readWorkspaceFile(relativePath: string) {
 	return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
+function extractMarkdownLinks(markdown: string) {
+	return [...markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map((match) => match[1]);
+}
+
 function compareSemver(left: string, right: string) {
 	const leftParts = left.split('.').map(Number);
 	const rightParts = right.split('.').map(Number);
@@ -30,14 +34,21 @@ describe('Obsidian Community preview blockers', () => {
 		expect(manifest.description).not.toMatch(/\bObsidian\b/i);
 	});
 
-	it('uses absolute README language-switch links so Community does not resolve them under /plugins/', () => {
+	it('uses same-page README language anchors and avoids Community-broken relative links', () => {
 		const englishReadme = readWorkspaceFile('README.md');
-		const chineseReadme = readWorkspaceFile('README.zh-CN.md');
-		const englishLink = englishReadme.match(/\[中文\]\(([^)]+)\)/)?.[1];
-		const chineseLink = chineseReadme.match(/\[English\]\(([^)]+)\)/)?.[1];
+		const languageLinks = {
+			english: englishReadme.match(/\[English\]\(([^)]+)\)/)?.[1],
+			chinese: englishReadme.match(/\[中文\]\(([^)]+)\)/)?.[1],
+		};
+		const communityUnsafeLinks = extractMarkdownLinks(englishReadme).filter(
+			(link) => !link.startsWith('#') && !/^https?:\/\//.test(link),
+		);
 
-		expect(englishLink).toMatch(/^https?:\/\//);
-		expect(chineseLink).toMatch(/^https?:\/\//);
+		expect(languageLinks.english).toBe('#english');
+		expect(languageLinks.chinese).toBe('#simplified-chinese');
+		expect(englishReadme).toMatch(/^## English$/m);
+		expect(englishReadme).toMatch(/^## Simplified Chinese$/m);
+		expect(communityUnsafeLinks).toEqual([]);
 	});
 
 	it('uses Setting headings instead of manually creating h2/h3 tags', () => {
