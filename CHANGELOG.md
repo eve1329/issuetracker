@@ -2,6 +2,11 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.0 - 2026-06-23
+
+- Added GitLab API v4 routing for repo issue sync, organization repo discovery, and collaborator sync while preserving the current GitCode v5 behavior.
+- Kept the Community README language switch on-page so the `中文` link stays within the same document instead of opening a separate file.
+
 ## 0.1.13 - 2026-06-22
 
 - Raised `minAppVersion` to `0.12.16` so the settings tab matches the Obsidian Community preview requirement for `Setting.setName(...)`.

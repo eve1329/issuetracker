@@ -1,7 +1,7 @@
 {
 	"id": "issuetracker",
 	"name": "IssueTracker",
-	"version": "0.1.13",
+	"version": "0.2.0",
 	"minAppVersion": "0.12.16",
 	"description": "Sync GitCode issues, classifications, and daily reports into your vault.",
 	"author": "ming",
