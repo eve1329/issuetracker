@@ -8,6 +8,7 @@ import {
 	RepoCollaboratorSyncStatus,
 } from "./member-types";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
+import {getGitlabApiVersion} from "../SettingsTab/settings";
 
 export default class MemberLoader {
 	private static readonly MAX_REPOS_PER_RUN = 12;
@@ -17,6 +18,23 @@ export default class MemberLoader {
 	private static readonly ERROR_RETRY_DELAY_MS = 30 * 60 * 1000;
 
 	constructor(private settings: GitlabIssuesSettings) {}
+
+	private getApiBaseUrl() {
+		return this.settings.gitlabApiUrl().replace(/\/+$/, '');
+	}
+
+	private getRepoCollaboratorsUrl(repoName: string) {
+		const apiBaseUrl = this.getApiBaseUrl();
+		const encodedOrgName = encodeURIComponent(this.settings.orgName);
+		const encodedRepoName = encodeURIComponent(repoName);
+
+		if (getGitlabApiVersion(apiBaseUrl) === 'v4') {
+			const projectId = encodeURIComponent(`${this.settings.orgName}/${repoName}`);
+			return `${apiBaseUrl}/projects/${projectId}/members/all`;
+		}
+
+		return `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/collaborators`;
+	}
 
 	async loadInternalMemberIndex(
 		repoNames: string[] = this.settings.repoList,
@@ -36,7 +54,7 @@ export default class MemberLoader {
 
 			try {
 				const collaborators = await GitlabApi.loadAllPages<GitCodeMember>(
-					`${this.settings.gitlabApiUrl()}/repos/${this.settings.orgName}/${repoName}/collaborators`,
+					this.getRepoCollaboratorsUrl(repoName),
 					this.settings.gitlabToken,
 				);
 

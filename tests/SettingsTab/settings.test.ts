@@ -1,5 +1,12 @@
 import {GitlabIssuesSettings} from "../../src/SettingsTab/settings-types";
-import {DEFAULT_SETTINGS, getSettingsUi, normalizeSettings, settings} from "../../src/SettingsTab/settings";
+import {
+	DEFAULT_SETTINGS,
+	getGitlabApiVersion,
+	getSettingsUi,
+	normalizeSettings,
+	resolveGitlabApiBaseUrl,
+	settings,
+} from "../../src/SettingsTab/settings";
 
 describe('DEFAULT_SETTINGS', () => {
 	it('should have the correct default values', () => {
@@ -68,6 +75,16 @@ describe('DEFAULT_SETTINGS', () => {
 
 	it('gitlabApiUrl should return correct API URL', () => {
 		expect(DEFAULT_SETTINGS.gitlabApiUrl()).toBe('https://gitcode.com/api/v5');
+	});
+
+	it('detects the GitLab API version from the configured base URL', () => {
+		expect(getGitlabApiVersion('https://gitcode.com/api/v5')).toBe('v5');
+		expect(getGitlabApiVersion('https://gitlab.example.com/api/v4')).toBe('v4');
+	});
+
+	it('keeps an explicit API base URL as-is when it already points at /api/v4', () => {
+		expect(resolveGitlabApiBaseUrl('https://gitlab.example.com', 'https://gitlab.example.com/api/v4'))
+			.toBe('https://gitlab.example.com/api/v4');
 	});
 
 	it('uses the explicit GitCode api base URL when provided', () => {

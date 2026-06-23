@@ -6,6 +6,7 @@ import GitlabLoader from "../../src/GitlabLoader/gitlab-loader";
 import GitlabApi from "../../src/GitlabLoader/gitlab-api";
 import {Issue} from "../../src/GitlabLoader/issue-types";
 import {GitlabIssue} from "../../src/GitlabLoader/issue";
+import {resolveGitlabApiBaseUrl} from "../../src/SettingsTab/settings";
 
 const mockPurgeExistingIssues = jest.fn();
 const mockProcessIssues = jest.fn();
@@ -47,7 +48,7 @@ const mockSettings: GitlabIssuesSettings = normalizeSettings({
 	refreshOnStartup: true,
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
-		return `${this.gitlabUrl}/api/v4`;
+		return resolveGitlabApiBaseUrl(this.gitlabUrl, this.apiBaseUrl);
 	}
 });
 
@@ -61,6 +62,9 @@ describe('GitlabLoader', () => {
 		mockProcessIssues.mockReset();
 		mockLoad.mockReset();
 		mockLoadAllPages.mockReset();
+		mockSettings.gitlabUrl = 'https://gitlab.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockSettings.gitlabAppId = '12345';
 		mockSettings.orgName = 'CPF-KMP-CMP';
 		mockSettings.repoList = [];
 		mockSettings.syncAllOrgRepos = false;
@@ -83,9 +87,18 @@ describe('GitlabLoader', () => {
 		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
 	});
 
+	it('should construct correct GitLab v4 URL for project level', () => {
+		mockSettings.gitlabUrl = 'https://gitlab.example.com';
+		mockSettings.apiBaseUrl = 'https://gitlab.example.com/api/v4';
+		mockSettings.gitlabAppId = 'group/project';
+
+		const expectedUrl = `${mockSettings.gitlabApiUrl()}/projects/${encodeURIComponent(mockSettings.gitlabAppId)}/issues?${mockSettings.issueFilter}`;
+		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
+	});
+
 	it('should construct correct URL for group level', () => {
 		mockSettings.gitlabIssuesLevel = 'group';
-		const expectedUrl = `${mockSettings.gitlabApiUrl()}/groups/${mockSettings.gitlabAppId}/issues?${mockSettings.issueFilter}`;
+		const expectedUrl = `${mockSettings.gitlabApiUrl()}/groups/${encodeURIComponent(mockSettings.gitlabAppId)}/issues?${mockSettings.issueFilter}`;
 		expect(gitlabLoader.getUrl()).toBe(expectedUrl);
 	});
 
@@ -119,6 +132,8 @@ describe('GitlabLoader', () => {
 		const mockIssues = [
 			{id: 78, title: '[BUG] 登录失败', description: '', due_date: '', web_url: '', references: ''},
 		] as Issue[];
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
 		mockSettings.issueFilter = '';
 		mockSettings.filter = '';
 		mockLoadAllPages.mockResolvedValue(mockIssues);
@@ -132,7 +147,24 @@ describe('GitlabLoader', () => {
 		);
 	});
 
+	it('loads repo issues with the GitLab project endpoint on v4', async () => {
+		mockSettings.gitlabUrl = 'https://gitlab.example.com';
+		mockSettings.apiBaseUrl = 'https://gitlab.example.com/api/v4';
+		mockSettings.issueFilter = '';
+		mockSettings.filter = '';
+		mockLoadAllPages.mockResolvedValue([]);
+
+		await gitlabLoader.loadRepoIssues('repo-a');
+
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://gitlab.example.com/api/v4/projects/CPF-KMP-CMP%2Frepo-a/issues',
+			mockSettings.gitlabToken,
+		);
+	});
+
 	it('encodes repo issue URLs before loading paginated results', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
 		mockSettings.orgName = 'CPF KMP/Platform';
 		mockSettings.issueFilter = 'labels=needs review';
 		mockLoadAllPages.mockResolvedValue([]);
@@ -146,6 +178,8 @@ describe('GitlabLoader', () => {
 	});
 
 	it('loads organization repositories with the paginated API helper', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
 		mockLoadAllPages.mockResolvedValueOnce([
 			{path: 'repo-a', name: 'repo-a'},
 		] as any);
@@ -155,6 +189,22 @@ describe('GitlabLoader', () => {
 		expect(repos).toEqual([{path: 'repo-a', name: 'repo-a'}]);
 		expect(mockLoadAllPages).toHaveBeenCalledWith(
 			'https://gitcode.com/api/v5/orgs/CPF-KMP-CMP/repos',
+			mockSettings.gitlabToken,
+		);
+	});
+
+	it('loads organization repositories from the GitLab group projects endpoint on v4', async () => {
+		mockSettings.gitlabUrl = 'https://gitlab.example.com';
+		mockSettings.apiBaseUrl = 'https://gitlab.example.com/api/v4';
+		mockSettings.syncAllOrgRepos = true;
+		mockLoadAllPages.mockResolvedValueOnce([
+			{path: 'repo-a', name: 'repo-a'},
+		] as any);
+
+		await gitlabLoader.loadOrgRepos();
+
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://gitlab.example.com/api/v4/groups/CPF-KMP-CMP/projects',
 			mockSettings.gitlabToken,
 		);
 	});

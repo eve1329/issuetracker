@@ -4,6 +4,7 @@ import {App} from "obsidian";
 import Filesystem from "../filesystem";
 import {GitCodeOrgRepository, Issue} from "./issue-types";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
+import {getGitlabApiVersion} from "../SettingsTab/settings";
 import {logger} from "../utils/utils";
 
 export default class GitlabLoader {
@@ -16,33 +17,60 @@ export default class GitlabLoader {
 		this.settings = settings;
 	}
 
+	private getApiBaseUrl() {
+		return this.settings.gitlabApiUrl().replace(/\/+$/, '');
+	}
+
+	private getApiVersion() {
+		return getGitlabApiVersion(this.getApiBaseUrl());
+	}
+
 	getUrl() {
 		const filter = this.settings.issueFilter;
+		const apiBaseUrl = this.getApiBaseUrl();
+		const version = this.getApiVersion();
 
 		switch (this.settings.gitlabIssuesLevel) {
 			case "project":
-				return `${this.settings.gitlabApiUrl()}/projects/${this.settings.gitlabAppId}/issues?${filter}`;
+				return version === 'v4'
+					? `${apiBaseUrl}/projects/${encodeURIComponent(this.settings.gitlabAppId)}/issues?${filter}`
+					: `${apiBaseUrl}/projects/${this.settings.gitlabAppId}/issues?${filter}`;
 			case "group":
-				return `${this.settings.gitlabApiUrl()}/groups/${this.settings.gitlabAppId}/issues?${filter}`;
+				return version === 'v4'
+					? `${apiBaseUrl}/groups/${encodeURIComponent(this.settings.gitlabAppId)}/issues?${filter}`
+					: `${apiBaseUrl}/groups/${this.settings.gitlabAppId}/issues?${filter}`;
 			case "personal":
 			default:
-				return `${this.settings.gitlabApiUrl()}/issues?${filter}`;
+				return `${apiBaseUrl}/issues?${filter}`;
 		}
 	}
 
 	getRepoIssuesUrl(repoName: string) {
-		const apiBaseUrl = this.settings.apiBaseUrl || this.settings.gitlabApiUrl();
+		const apiBaseUrl = this.getApiBaseUrl();
+		const version = this.getApiVersion();
 		const encodedOrgName = encodeURIComponent(this.settings.orgName);
 		const encodedRepoName = encodeURIComponent(repoName);
-		const baseUrl = `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues`;
 		const filter = this.settings.issueFilter.trim();
+
+		if (version === 'v4') {
+			const projectId = encodeURIComponent(`${this.settings.orgName}/${repoName}`);
+			const baseUrl = `${apiBaseUrl}/projects/${projectId}/issues`;
+
+			return filter ? `${baseUrl}?${encodeURI(filter)}` : baseUrl;
+		}
+
+		const baseUrl = `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues`;
 
 		return filter ? `${baseUrl}?${encodeURI(filter)}` : baseUrl;
 	}
 
 	getOrgReposUrl() {
-		const apiBaseUrl = this.settings.apiBaseUrl || this.settings.gitlabApiUrl();
+		const apiBaseUrl = this.getApiBaseUrl();
 		const encodedOrgName = encodeURIComponent(this.settings.orgName);
+
+		if (this.getApiVersion() === 'v4') {
+			return `${apiBaseUrl}/groups/${encodedOrgName}/projects`;
+		}
 
 		return `${apiBaseUrl}/orgs/${encodedOrgName}/repos`;
 	}

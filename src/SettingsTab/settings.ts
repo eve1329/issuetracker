@@ -1,5 +1,21 @@
 import {GitlabIssuesSettings, SettingsTab, UiLanguage} from "./settings-types";
 
+export function getGitlabApiVersion(apiBaseUrl: string): 'v4' | 'v5' {
+	const normalizedApiBaseUrl = apiBaseUrl.trim().replace(/\/+$/, '');
+
+	return /\/api\/v4(?:\/|$)/.test(normalizedApiBaseUrl) ? 'v4' : 'v5';
+}
+
+export function resolveGitlabApiBaseUrl(gitlabUrl: string, apiBaseUrl?: string): string {
+	const explicitApiBaseUrl = apiBaseUrl?.trim().replace(/\/+$/, '');
+
+	if (explicitApiBaseUrl) {
+		return explicitApiBaseUrl;
+	}
+
+	return `${gitlabUrl.trim().replace(/\/+$/, '')}/api/v5`;
+}
+
 export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	gitlabUrl: 'https://gitcode.com',
 	apiBaseUrl: 'https://gitcode.com/api/v5',
@@ -59,7 +75,7 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	refreshOnStartup: true,
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
-		return this.apiBaseUrl || `${this.gitlabUrl}/api/v5`;
+		return resolveGitlabApiBaseUrl(this.gitlabUrl, this.apiBaseUrl);
 	}
 };
 

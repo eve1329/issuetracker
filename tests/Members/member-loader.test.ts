@@ -38,6 +38,30 @@ describe('MemberLoader', () => {
 		);
 	});
 
+	it('builds the internal member index from the GitLab project members endpoint on v4', async () => {
+		mockLoadAllPages.mockResolvedValueOnce([{username: 'repo_user'}]);
+
+		const loader = new MemberLoader({
+			...DEFAULT_SETTINGS,
+			gitlabUrl: 'https://gitlab.example.com',
+			apiBaseUrl: 'https://gitlab.example.com/api/v4',
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a'],
+			internalUserWhitelist: ['manual_user'],
+		});
+
+		const result = await loader.loadInternalMemberIndex();
+
+		expect(result.index.usernames.repo_user.source).toBe('repo');
+		expect(result.index.usernames.manual_user.source).toBe('whitelist');
+		expect(mockLoadAllPages).toHaveBeenCalledTimes(1);
+		expect(mockLoadAllPages).toHaveBeenNthCalledWith(
+			1,
+			'https://gitlab.example.com/api/v4/projects/CPF-KMP-CMP%2Frepo-a/members/all',
+			'',
+		);
+	});
+
 	it('keeps the first repo collaborator source when the same username appears multiple times', async () => {
 		mockLoadAllPages
 			.mockResolvedValueOnce([{username: 'shared_user'}])
