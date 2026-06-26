@@ -102,7 +102,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 	}
 
 	private fetchFromGitlab() {
-		new Notice('Updating issues from GitCode');
+		new Notice('Updating issues from supported hosts');
 		void new SyncService(this.app, this.settings).run()
 			.catch((error) => logger(error instanceof Error ? error.message : String(error)));
 	}

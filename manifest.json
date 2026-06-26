@@ -3,7 +3,7 @@
 	"name": "IssueTracker",
 	"version": "0.2.0",
 	"minAppVersion": "0.12.16",
-	"description": "Sync GitCode issues, classifications, and daily reports into your vault.",
+	"description": "Sync issues, classifications, and daily reports from supported Git hosts into your vault.",
 	"author": "ming",
 	"isDesktopOnly": false
 }

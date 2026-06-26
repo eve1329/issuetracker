@@ -1,7 +1,7 @@
 {
 	"name": "issuetracker",
 	"version": "0.2.0",
-	"description": "Vault plugin for syncing GitCode issues and daily reports.",
+	"description": "Vault plugin for syncing issues and daily reports from supported Git hosts.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -16,6 +16,9 @@
 	},
 	"keywords": [
 		"obsidian",
+		"github",
+		"gitee",
+		"gitlab",
 		"gitcode",
 		"issue-tracker"
 	],
