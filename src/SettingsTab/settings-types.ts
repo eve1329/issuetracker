@@ -2,6 +2,7 @@ export type GitlabIssuesLevel = 'personal' | 'project' | 'group';
 export type GitlabRefreshInterval = "15" | "30" | "45" |"60" | "120" | "off";
 export type RequestKind = 'bug' | 'requirement' | 'unknown';
 export type UiLanguage = 'en' | 'zh-CN';
+export type SupportedGitHost = 'gitcode' | 'gitlab' | 'github' | 'gitee' | 'unknown';
 
 export interface ClassificationRules {
 	titlePrefixes: Record<string, Exclude<RequestKind, 'unknown'>>;
@@ -20,6 +21,8 @@ export interface GitlabIssuesSettings {
 	syncAllOrgRepos: boolean;
 	gitlabAppId: string;
 	internalUserWhitelist: string[];
+	internalMemberDirectory: Record<string, string>;
+	issueLedgerStartMonth: string;
 	classificationRules: ClassificationRules;
 	templateFile: string;
 	outputDir: string;
@@ -59,6 +62,8 @@ export interface SettingInput extends Setting {
 		| "orgName"
 		| "repoList"
 		| "internalUserWhitelist"
+		| "internalMemberDirectory"
+		| "issueLedgerStartMonth"
 		| "classificationRules"
 		| "issuesFolder"
 		| "metaFolder"
@@ -82,9 +87,9 @@ export interface SettingsTab {
 	settingInputs: SettingInput[],
 	dropdowns: DropdownInputs[]
 	checkBoxInputs: SettingCheckboxInput[],
-	getGitlabIssuesLevel: (currentLevel: Omit<GitlabIssuesLevel, "personal">) => SettingOutLink;
+	getGitlabIssuesLevel: (currentLevel: Omit<GitlabIssuesLevel, "personal">, host: SupportedGitHost) => SettingOutLink;
 	getGitlabIdSettingName: (currentLevelTitle: string) => string;
 	getGitlabIdLinkText: (currentLevelTitle: string) => string;
 	moreInformationTitle: string;
-	gitlabDocumentation: SettingOutLink
+	getGitlabDocumentation: (host: SupportedGitHost) => SettingOutLink
 }

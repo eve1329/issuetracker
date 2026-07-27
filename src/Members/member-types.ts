@@ -2,7 +2,8 @@ export type InternalMatchSource = 'org' | 'repo' | 'whitelist' | 'none';
 export type RepoCollaboratorSyncStatus = 'success' | 'forbidden' | 'rate_limited' | 'error';
 
 export interface GitCodeMember {
-	username: string;
+	username?: string;
+	login?: string;
 	name?: string;
 }
 

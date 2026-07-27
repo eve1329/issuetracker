@@ -3,9 +3,9 @@ IssueTracker for Obsidian
 
 [English](https://github.com/eve1329/issuetracker/blob/main/README.md#english)
 
-IssueTracker 是一个本地 Obsidian 插件工作区，用来把 GitHub、Gitee、GitLab 和 GitCode 的 issue 同步到你的知识库。
+IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托管平台上的 issue 同步到你的知识库。
 
-当前实现支持 GitHub、Gitee、GitLab 和 GitCode 的 issue 工作流，并在基础同步之外补充了结构化的日报生成能力。
+当前实现已经验证了 GitCode 和 GitLab 风格的 issue API，包括 GitLab API `v4` 和 GitCode API `v5`。同时也补了 GitHub 和 Gitee 的兼容路径，但这两条路径还没有完整测过；如果你遇到 bug，可以直接提 issue。
 
 ## 它能做什么
 
@@ -14,13 +14,20 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 GitHub、Gitee
 - 结合仓库协作者信息和手工白名单，把作者标记为内部或外部成员。
 - 通过可配置的前缀、关键词和标签规则，把 issue 分类为 `bug`、`requirement` 或 `unknown`。
 - 生成便于机器处理的日报，以及适合 AI 消费的日报摘要。
+- 生成 13 列 issue 台账：CSV 保留原始 URL，XLSX 使用原生超链接，导入腾讯文档后可直接点击。
+- 在已追踪的 issue 关闭时生成独立 Markdown 提醒，并保留当前关闭 issue 列表便于跟进。
 - 将同步元数据、降级同步告警和协作者缓存保存到配置的 meta 目录。
 
 ## 默认输出结构
 
 - `GitCode Issues/issues/*.md`
 - `GitCode Issues/meta/internal-members.json`
+- `GitCode Issues/meta/issue-closure-state.json`
+- `GitCode Issues/meta/issue-ledger-state.json`
 - `GitCode Issues/meta/sync-state.json`
+- `GitCode Issues/reports/issue-ledger.csv`
+- `GitCode Issues/reports/issue-ledger.xlsx`
+- `GitCode Issues/reports/issue-close-reminders.md`
 - `GitCode Issues/reports/daily/YYYY-MM-DD.md`
 - `GitCode Issues/reports/daily-brief/YYYY-MM-DD-brief.md`
 
@@ -28,7 +35,9 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 GitHub、Gitee
 
 ## 安装
 
-这个仓库当前按本地插件工作区来使用。
+使用发布 ZIP 时，将其中的 `issuetracker` 文件夹解压到你的 vault 的 `.obsidian/plugins/` 目录，然后在 Obsidian 中启用 `IssueTracker`。ZIP 不会包含 `data.json`，请在插件设置页填写你自己的 token 和同步配置。
+
+从源码工作区构建时：
 
 1. 如果依赖还没安装，先执行一次 `npm install`。
 2. 使用 `npm run build` 构建插件。
@@ -42,18 +51,20 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 GitHub、Gitee
 
 打开 `IssueTracker` 的设置页，配置以下内容：
 
-- `GitCode instance URL`：历史字段名，表示主机地址；默认是 `https://gitcode.com`，也可以填写 GitHub、Gitee、GitLab 或 GitCode
+- `Git Host URL`：代码里沿用的历史字段名，本质上表示当前主机地址；默认是 `https://gitcode.com`
 - `API Base URL`：默认是 `https://gitcode.com/api/v5`；需要时可按当前主机的 API 根路径覆盖
 - `Personal Access Token`：用于当前主机 API 请求的 token
 - `Organization Name`：拥有目标仓库的组织、group 或 owner
 - `Repository List`：当你不想同步整个组织或 group 时，每行填写一个仓库
 - `Sync all organization repositories`：自动发现并同步该组织或 group 下的所有仓库
 - `Internal User Whitelist`：当协作者同步不完整时，仍要视为内部成员的用户名白名单
+- `Internal Member Directory`：可选的账号到姓名 JSON 映射，用于 issue 台账；目录中的账号会视为内部人员
+- `Issue Ledger Start Month`：可选 `YYYY-MM` 截止月份，只会将该月及之后创建的 issue 写入台账；修改该值会重建台账序号
 - `Classification Rules`：把标题或标签映射到 `bug` / `requirement` 的 JSON 规则
 - `Issues Folder`、`Meta Folder`、`Reports Folder`：vault 内的输出目录
 - `Generate daily reports`：同步完成后生成日报和 AI 摘要
 
-设置页里仍保留了原始导入器路径中的旧 API scope 兼容区块。这个分支当前的主要工作流是上面这套多主机仓库同步模型。
+设置页里仍保留了原始导入器路径中的旧 API scope 兼容区块。这个分支当前的主要工作流是上面这套仓库同步模型。
 
 ## 使用方式
 

@@ -252,4 +252,71 @@ describe('classifyIssue', () => {
 			requestKindMatchedBy: 'title-keyword',
 		});
 	});
+
+	it('classifies issue titles about missing comments or unclear documentation as requirements', () => {
+		const result = classifyIssue(
+			{
+				title: '安全避让区类型AvoidAreaType接口里没有相关注释说明，开发者不易理解',
+				labels: [],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+
+		expect(result).toEqual({
+			requestKind: 'requirement',
+			requestKindMatchedBy: 'title-keyword',
+		});
+	});
+
+	it('classifies safe keyboard overlap titles as bugs', () => {
+		const result = classifyIssue(
+			{
+				title: '点击输入框唤起安全键盘时，页面上移高度不足，发生键盘遮挡',
+				labels: [],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+
+		expect(result).toEqual({
+			requestKind: 'bug',
+			requestKindMatchedBy: 'title-keyword',
+		});
+	});
+
+	it('classifies compatibility, implementation, and fix-plan titles using the updated keywords', () => {
+		const compatibilityResult = classifyIssue(
+			{
+				title: 'cp到04 嵌套滚动低版本API编译兼容',
+				labels: [],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+		const implementationResult = classifyIssue(
+			{
+				title: 'Implementation for IR011 SR004 yuv compression',
+				labels: [],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+		const repairResult = classifyIssue(
+			{
+				title: 'A外C内 多内层嵌套滚动修复',
+				labels: [],
+			},
+			DEFAULT_SETTINGS.classificationRules,
+		);
+
+		expect(compatibilityResult).toEqual({
+			requestKind: 'requirement',
+			requestKindMatchedBy: 'title-keyword',
+		});
+		expect(implementationResult).toEqual({
+			requestKind: 'requirement',
+			requestKindMatchedBy: 'title-keyword',
+		});
+		expect(repairResult).toEqual({
+			requestKind: 'bug',
+			requestKindMatchedBy: 'title-keyword',
+		});
+	});
 });

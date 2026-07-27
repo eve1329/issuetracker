@@ -142,7 +142,7 @@ describe('GitlabLoader', () => {
 
 		expect(issues).toEqual(mockIssues);
 		expect(mockLoadAllPages).toHaveBeenCalledWith(
-			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues',
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?state=all',
 			mockSettings.gitlabToken,
 		);
 	});
@@ -157,7 +157,22 @@ describe('GitlabLoader', () => {
 		await gitlabLoader.loadRepoIssues('repo-a');
 
 		expect(mockLoadAllPages).toHaveBeenCalledWith(
-			'https://gitlab.example.com/api/v4/projects/CPF-KMP-CMP%2Frepo-a/issues',
+			'https://gitlab.example.com/api/v4/projects/CPF-KMP-CMP%2Frepo-a/issues?state=all',
+			mockSettings.gitlabToken,
+		);
+	});
+
+	it('loads repo issues with the GitHub repository endpoint when configured against GitHub', async () => {
+		mockSettings.gitlabUrl = 'https://github.com';
+		mockSettings.apiBaseUrl = 'https://api.github.com';
+		mockSettings.issueFilter = '';
+		mockSettings.filter = '';
+		mockLoadAllPages.mockResolvedValue([]);
+
+		await gitlabLoader.loadRepoIssues('repo-a');
+
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://api.github.com/repos/CPF-KMP-CMP/repo-a/issues?state=all',
 			mockSettings.gitlabToken,
 		);
 	});
@@ -172,8 +187,18 @@ describe('GitlabLoader', () => {
 		await gitlabLoader.loadRepoIssues('repo a#1');
 
 		expect(mockLoadAllPages).toHaveBeenCalledWith(
-			'https://gitcode.com/api/v5/repos/CPF%20KMP%2FPlatform/repo%20a%231/issues?labels=needs%20review',
+			'https://gitcode.com/api/v5/repos/CPF%20KMP%2FPlatform/repo%20a%231/issues?labels=needs%20review&state=all',
 			mockSettings.gitlabToken,
+		);
+	});
+
+	it('replaces a configured state filter with state=all while preserving other parameters', () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockSettings.issueFilter = 'state=opened&labels=needs review';
+
+		expect(gitlabLoader.getRepoIssuesUrl('repo-a')).toBe(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/repo-a/issues?state=all&labels=needs%20review',
 		);
 	});
 
@@ -205,6 +230,21 @@ describe('GitlabLoader', () => {
 
 		expect(mockLoadAllPages).toHaveBeenCalledWith(
 			'https://gitlab.example.com/api/v4/groups/CPF-KMP-CMP/projects',
+			mockSettings.gitlabToken,
+		);
+	});
+
+	it('loads organization repositories from the GitHub org repos endpoint', async () => {
+		mockSettings.gitlabUrl = 'https://github.com';
+		mockSettings.apiBaseUrl = 'https://api.github.com';
+		mockLoadAllPages.mockResolvedValueOnce([
+			{name: 'repo-a'},
+		] as any);
+
+		await gitlabLoader.loadOrgRepos();
+
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://api.github.com/orgs/CPF-KMP-CMP/repos',
 			mockSettings.gitlabToken,
 		);
 	});

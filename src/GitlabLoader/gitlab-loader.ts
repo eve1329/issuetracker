@@ -4,7 +4,7 @@ import {App} from "obsidian";
 import Filesystem from "../filesystem";
 import {GitCodeOrgRepository, Issue} from "./issue-types";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
-import {getGitlabApiVersion} from "../SettingsTab/settings";
+import {detectGitHost, getGitlabApiVersion} from "../SettingsTab/settings";
 import {logger} from "../utils/utils";
 
 export default class GitlabLoader {
@@ -23,6 +23,10 @@ export default class GitlabLoader {
 
 	private getApiVersion() {
 		return getGitlabApiVersion(this.getApiBaseUrl());
+	}
+
+	private getHost() {
+		return detectGitHost(this.settings.gitlabUrl, this.settings.apiBaseUrl);
 	}
 
 	getUrl() {
@@ -50,23 +54,69 @@ export default class GitlabLoader {
 		const version = this.getApiVersion();
 		const encodedOrgName = encodeURIComponent(this.settings.orgName);
 		const encodedRepoName = encodeURIComponent(repoName);
-		const filter = this.settings.issueFilter.trim();
+		const filter = this.getRepoIssueFilter();
+		const host = this.getHost();
+		let baseUrl: string;
 
-		if (version === 'v4') {
+		if (host === 'github' || host === 'gitee') {
+			baseUrl = `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues`;
+		} else if (version === 'v4') {
 			const projectId = encodeURIComponent(`${this.settings.orgName}/${repoName}`);
-			const baseUrl = `${apiBaseUrl}/projects/${projectId}/issues`;
-
-			return filter ? `${baseUrl}?${encodeURI(filter)}` : baseUrl;
+			baseUrl = `${apiBaseUrl}/projects/${projectId}/issues`;
+		} else {
+			baseUrl = `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues`;
 		}
 
-		const baseUrl = `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues`;
+		return `${baseUrl}?${encodeURI(filter)}`;
+	}
 
-		return filter ? `${baseUrl}?${encodeURI(filter)}` : baseUrl;
+	private getRepoIssueFilter() {
+		let hasState = false;
+		const filterParameters = this.settings.issueFilter
+			.trim()
+			.replace(/^\?/, '')
+			.split('&')
+			.filter(Boolean)
+			.flatMap((parameter) => {
+				const rawKey = parameter.split('=', 1)[0];
+				let key = rawKey;
+				try {
+					key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+				} catch {
+					// Keep malformed user-provided parameters instead of discarding the filter.
+				}
+
+				if (key.toLowerCase() !== 'state') {
+					return [parameter];
+				}
+
+				if (hasState) {
+					return [];
+				}
+
+				hasState = true;
+				return ['state=all'];
+			});
+
+		if (!hasState) {
+			filterParameters.push('state=all');
+		}
+
+		return filterParameters.join('&');
 	}
 
 	getOrgReposUrl() {
 		const apiBaseUrl = this.getApiBaseUrl();
 		const encodedOrgName = encodeURIComponent(this.settings.orgName);
+		const host = this.getHost();
+
+		if (host === 'github') {
+			return `${apiBaseUrl}/orgs/${encodedOrgName}/repos`;
+		}
+
+		if (host === 'gitee') {
+			return `${apiBaseUrl}/orgs/${encodedOrgName}/repos`;
+		}
 
 		if (this.getApiVersion() === 'v4') {
 			return `${apiBaseUrl}/groups/${encodedOrgName}/projects`;

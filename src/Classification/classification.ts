@@ -22,6 +22,10 @@ export function classifyIssue(
 	issue: Pick<Issue, 'title' | 'labels'>,
 	rules: ClassificationRules,
 ) {
+	const labelNames = Array.isArray(issue.labels)
+		? issue.labels
+		: Object.keys(issue.labels ?? {});
+
 	for (const [prefix, requestKind] of Object.entries(rules.titlePrefixes)) {
 		if (issue.title.startsWith(prefix)) {
 			return {
@@ -31,7 +35,7 @@ export function classifyIssue(
 		}
 	}
 
-	for (const label of issue.labels) {
+	for (const label of labelNames) {
 		if (rules.labels[label]) {
 			return {
 				requestKind: rules.labels[label],

@@ -1,12 +1,57 @@
 import {requestUrl, RequestUrlParam, RequestUrlResponse} from 'obsidian';
+import {detectGitHost} from "../SettingsTab/settings";
 
 export default class GitlabApi {
 
+	static buildHeaders(url: string, gitlabToken: string): Record<string, string> {
+		if (!gitlabToken) {
+			return {};
+		}
+
+		const host = detectGitHost(url, url);
+
+		switch (host) {
+			case 'github':
+				return {
+					Authorization: `Bearer ${gitlabToken}`,
+					Accept: 'application/vnd.github+json',
+					'X-GitHub-Api-Version': '2022-11-28',
+				};
+			case 'gitee':
+				return {
+					Authorization: `token ${gitlabToken}`,
+				};
+			case 'gitlab':
+			case 'gitcode':
+			case 'unknown':
+			default:
+				return {'PRIVATE-TOKEN': gitlabToken};
+		}
+	}
+
+	static appendTokenQueryIfNeeded(url: string, gitlabToken: string): string {
+		if (!gitlabToken) {
+			return url;
+		}
+
+		const host = detectGitHost(url, url);
+		if (host !== 'gitee') {
+			return url;
+		}
+
+		const parsed = new URL(url);
+		if (!parsed.searchParams.has('access_token')) {
+			parsed.searchParams.set('access_token', gitlabToken);
+		}
+
+		return parsed.toString();
+	}
+
 	static load<T>(url: string, gitlabToken: string): Promise<T> {
+		const requestUrlString = GitlabApi.appendTokenQueryIfNeeded(url, gitlabToken);
+		const headers = GitlabApi.buildHeaders(requestUrlString, gitlabToken);
 
-		const headers = { 'PRIVATE-TOKEN': gitlabToken };
-
-		const params: RequestUrlParam = { url: url, headers: headers, throw: false };
+		const params: RequestUrlParam = { url: requestUrlString, headers: headers, throw: false };
 
 		return requestUrl(params)
 			.then((response: RequestUrlResponse) => {
@@ -21,22 +66,15 @@ export default class GitlabApi {
 	static async loadAllPages<T>(baseUrl: string, gitlabToken: string): Promise<T[]> {
 		const result: T[] = [];
 		let page = 1;
+		let hasNextPage = true;
 
-		while (true) {
+		while (hasNextPage) {
 			const separator = baseUrl.includes('?') ? '&' : '?';
 			const pageUrl = `${baseUrl}${separator}per_page=100&page=${page}`;
 			const pageData = await GitlabApi.load<T[]>(pageUrl, gitlabToken);
 
-			if (pageData.length === 0) {
-				break;
-			}
-
 			result.push(...pageData);
-
-			if (pageData.length < 100) {
-				break;
-			}
-
+			hasNextPage = pageData.length === 100;
 			page += 1;
 		}
 

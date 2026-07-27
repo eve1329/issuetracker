@@ -13,19 +13,20 @@ export interface GitCodeUser {
 	readonly html_url?: string;
 	readonly id: number | string;
 	readonly login: string;
-	readonly name: string;
+	readonly name?: string;
+	readonly username?: string;
 }
 
 export interface GitCodeRepository {
-	readonly id: number;
-	readonly full_name: string;
-	readonly path: string;
+	readonly id: number | string;
+	readonly full_name?: string;
+	readonly path?: string;
 	readonly name: string;
 }
 
 export interface GitCodeOrgRepository {
-	readonly id: number;
-	readonly path: string;
+	readonly id: number | string;
+	readonly path?: string;
 	readonly name: string;
 	readonly full_name?: string;
 	readonly open_issues_count?: number;
@@ -66,41 +67,41 @@ export interface ShortIssue {
 }
 
 export interface Issue extends ShortIssue {
-	readonly web_url: string;
+	readonly web_url?: string;
 	readonly html_url?: string;
-	readonly references: string | References;
+	readonly references?: string | References;
 
-	readonly assignees: Assignee[];
-	readonly author: Assignee;
+	readonly assignees?: Assignee[];
+	readonly author?: Assignee;
 	readonly user?: GitCodeUser;
-	readonly closed_by: Assignee;
-	readonly epic: Epic;
-	readonly labels: string[];
-	readonly upvotes: number;
-	readonly downvotes: number;
-	readonly merge_requests_count: number;
-	readonly user_notes_count: number;
-	readonly imported: boolean;
-	readonly imported_from: string;
-	readonly has_tasks: boolean
-	readonly task_status: string,
-	readonly confidential: boolean,
-	readonly discussion_locked: boolean
-	readonly issue_type: string,
-	readonly    time_stats: TimeStats,
-	readonly severity: string,
-	readonly _links: {
+	readonly closed_by?: Assignee;
+	readonly epic?: Epic;
+	readonly labels: string[] | Record<string, string>;
+	readonly upvotes?: number;
+	readonly downvotes?: number;
+	readonly merge_requests_count?: number;
+	readonly user_notes_count?: number;
+	readonly imported?: boolean;
+	readonly imported_from?: string;
+	readonly has_tasks?: boolean
+	readonly task_status?: string,
+	readonly confidential?: boolean,
+	readonly discussion_locked?: boolean
+	readonly issue_type?: string,
+	readonly time_stats?: TimeStats,
+	readonly severity?: string,
+	readonly _links?: {
 		self: string,
 		notes: string,
 		award_emoji: string,
 		project: string,
 		closed_as_duplicate_of: string
 	},
-	readonly task_completion_status: {
+	readonly task_completion_status?: {
 		count: number,
 		completed_count: number
 	}
-	readonly milestone: ShortIssue
+	readonly milestone?: ShortIssue
 	readonly repository?: GitCodeRepository;
 }
 

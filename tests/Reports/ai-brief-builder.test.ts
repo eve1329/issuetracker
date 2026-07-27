@@ -27,7 +27,7 @@ describe('buildAiBriefMarkdown', () => {
 			unknownIssues: [],
 		} as DailyReport);
 
-		expect(markdown).toContain('# GitCode Issue Daily Brief - 2026-06-17');
+		expect(markdown).toContain('# Issue Daily Brief - 2026-06-17');
 		expect(markdown).toContain('## Summary Data');
 		expect(markdown).toContain('- New bugs: 1');
 		expect(markdown).toContain('- External bugs: 1');

@@ -42,6 +42,11 @@ export default class Filesystem {
 		await this.vault.create(path, content);
 	}
 
+	public async writeBinary(path: string, data: Uint8Array) {
+		const bytes = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+		await this.vault.adapter.writeBinary(path, bytes);
+	}
+
 	public async writeJson(path: string, value: unknown) {
 		const content = JSON.stringify(value, null, 2) ?? 'null';
 
@@ -227,7 +232,7 @@ export default class Filesystem {
 
 	private async readIssueNote(file: TFile): Promise<NormalizedIssueNote | null> {
 		try {
-			const content = await this.vault.cachedRead(file);
+			const content = await this.vault.read(file);
 			const frontmatter = this.extractFrontmatter(content);
 
 			if (!frontmatter) {

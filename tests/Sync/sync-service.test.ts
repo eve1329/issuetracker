@@ -13,6 +13,7 @@ const mockEnsureFolders = jest.fn();
 const mockWriteJson = jest.fn();
 const mockWriteIssueNotes = jest.fn();
 const mockUpsertTextFile = jest.fn();
+const mockWriteBinary = jest.fn();
 const mockReadJson = jest.fn();
 const mockReadIssueNotes = jest.fn();
 const mockPurgeIssueNotes = jest.fn();
@@ -26,6 +27,7 @@ jest.spyOn(FilesystemModule, "default").mockImplementation(() => ({
 	writeJson: mockWriteJson,
 	writeIssueNotes: mockWriteIssueNotes,
 	upsertTextFile: mockUpsertTextFile,
+	writeBinary: mockWriteBinary,
 	readJson: mockReadJson,
 	readIssueNotes: mockReadIssueNotes,
 	purgeIssueNotes: mockPurgeIssueNotes,
@@ -187,6 +189,32 @@ function makeGitCodeIssue(partial: Partial<Issue> = {}): Issue {
 	} as Issue;
 }
 
+function makePersistedIssueNote(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssueNote {
+	return {
+		id: 123456,
+		iid: 78,
+		title: '[BUG] 登录失败',
+		state: 'opened',
+		createdAt: '2026-06-17T09:12:00+08:00',
+		updatedAt: '2026-06-17T10:05:00+08:00',
+		webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/78',
+		projectId: 1001,
+		projectPath: 'CPF-KMP-CMP/repo-a',
+		sourceScope: 'project',
+		sourceRepo: 'repo-a',
+		authorUsername: 'partner_a',
+		authorName: 'Partner A',
+		isInternalAuthor: false,
+		internalMatchedBy: 'none',
+		labels: [],
+		issueTypeRaw: 'issue',
+		requestKind: 'bug',
+		requestKindMatchedBy: 'title-prefix',
+		referencesFull: 'CPF-KMP-CMP/repo-a#78',
+		...overrides,
+	};
+}
+
 describe('SyncService', () => {
 	const mockApp = {vault: {}} as App;
 
@@ -266,10 +294,10 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			2,
 			'GitCode Issues/reports/daily-brief/2026-06-17-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-17'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-17'),
 		);
 		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			2,
+			3,
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'success',
@@ -322,7 +350,7 @@ describe('SyncService', () => {
 			expect.any(String),
 		);
 		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			2,
+			3,
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -648,7 +676,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(8);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			1,
 			'GitCode Issues/reports/daily/2026-06-19.md',
@@ -657,7 +685,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			2,
 			'GitCode Issues/reports/daily-brief/2026-06-19-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-19'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-19'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			3,
@@ -667,7 +695,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			4,
 			'GitCode Issues/reports/daily-brief/2026-06-20-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-20'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-20'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			5,
@@ -677,7 +705,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			6,
 			'GitCode Issues/reports/daily-brief/2026-06-21-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-21'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-21'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			7,
@@ -687,7 +715,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			8,
 			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-22'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-22'),
 		);
 		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
@@ -748,7 +776,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			2,
 			'GitCode Issues/reports/daily-brief/2026-06-19-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-19'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-19'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			3,
@@ -758,7 +786,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			4,
 			'GitCode Issues/reports/daily-brief/2026-06-20-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-20'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-20'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			5,
@@ -768,7 +796,7 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			6,
 			'GitCode Issues/reports/daily-brief/2026-06-21-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-21'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-21'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			7,
@@ -778,9 +806,9 @@ describe('SyncService', () => {
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			8,
 			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
-			expect.stringContaining('# GitCode Issue Daily Brief - 2026-06-22'),
+			expect.stringContaining('# Issue Daily Brief - 2026-06-22'),
 		);
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(8);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
 		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
@@ -1248,5 +1276,260 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily/2026-06-17.md',
 			expect.stringContaining('newRequirementCount: 1'),
 		);
+	});
+
+	it('writes a stable issue ledger that marks a tracked issue after it closes', async () => {
+		const settings = makeSettings({
+			generateDailyReports: false,
+			internalMemberDirectory: {dev_a: '开发甲'},
+		});
+		const openedNote = makePersistedIssueNote({
+			authorUsername: 'Dev_A',
+			authorName: 'GitCode Dev',
+		});
+		const closedNote = {...openedNote, state: 'closed', updatedAt: '2026-06-18T10:05:00+08:00'};
+		let previousSerialState: {nextSerial: number; serialByIssueKey: Record<string, number>} | null = null;
+
+		mockReadJson.mockImplementation(async (path: string) => (
+			path === 'GitCode Issues/meta/issue-ledger-state.json' ? previousSerialState : null
+		));
+		mockLoadRepoIssues
+			.mockResolvedValueOnce([makeIssue()])
+			.mockResolvedValueOnce([makeIssue({state: 'closed'})]);
+		mockReadIssueNotes
+			.mockResolvedValueOnce([openedNote])
+			.mockResolvedValueOnce([closedNote]);
+
+		await new SyncService(mockApp, settings).run();
+
+		const initialSerialState = {
+			nextSerial: 2,
+			serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+		};
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			1,
+			'GitCode Issues/reports/issue-ledger.csv',
+			expect.stringContaining('1,[BUG] 登录失败,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/78,,缺陷,opened,内部,Dev_A,开发甲,,2026/6/17 09:12:00,,'),
+		);
+		expect(mockWriteBinary).toHaveBeenNthCalledWith(
+			1,
+			'GitCode Issues/reports/issue-ledger.xlsx',
+			expect.any(Uint8Array),
+		);
+		expect(mockWriteJson).toHaveBeenNthCalledWith(
+			2,
+			'GitCode Issues/meta/issue-ledger-state.json',
+			initialSerialState,
+		);
+
+		previousSerialState = initialSerialState;
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			2,
+			'GitCode Issues/reports/issue-ledger.csv',
+			expect.stringContaining('1,[BUG] 登录失败,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/78,,缺陷,closed,内部,Dev_A,开发甲,,2026/6/17 09:12:00,,'),
+		);
+		expect(mockWriteJson).toHaveBeenNthCalledWith(
+			5,
+			'GitCode Issues/meta/issue-ledger-state.json',
+			initialSerialState,
+		);
+	});
+
+	it('writes an issue-close reminder only when a tracked issue transitions to closed', async () => {
+		const settings = makeSettings({generateDailyReports: false, issueLedgerStartMonth: '2026-05'});
+		const openedNote = makePersistedIssueNote();
+		const closedNote = {...openedNote, state: 'closed', updatedAt: '2026-06-18T10:05:00+08:00'};
+		let previousLedgerState: {nextSerial: number; serialByIssueKey: Record<string, number>; startMonth?: string} | null = null;
+		let previousClosureState: {closedIssueKeys: string[]; startMonth?: string} | null = null;
+
+		mockReadJson.mockImplementation(async (path: string) => {
+			if (path === 'GitCode Issues/meta/issue-ledger-state.json') {
+				return previousLedgerState;
+			}
+			if (path === 'GitCode Issues/meta/issue-closure-state.json') {
+				return previousClosureState;
+			}
+			return null;
+		});
+		mockLoadRepoIssues
+			.mockResolvedValueOnce([makeIssue()])
+			.mockResolvedValueOnce([makeIssue({state: 'closed', updated_at: '2026-06-18T10:05:00+08:00'})]);
+		mockReadIssueNotes
+			.mockResolvedValueOnce([openedNote])
+			.mockResolvedValueOnce([closedNote]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(1);
+
+		previousLedgerState = {
+			nextSerial: 2,
+			serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+			startMonth: '2026-05',
+		};
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
+			3,
+			'GitCode Issues/reports/issue-close-reminders.md',
+			expect.stringContaining('首次建立提醒基线'),
+		);
+		expect(mockWriteJson).toHaveBeenNthCalledWith(
+			6,
+			'GitCode Issues/meta/issue-closure-state.json',
+			{closedIssueKeys: ['CPF-KMP-CMP/repo-a#78'], startMonth: '2026-05'},
+		);
+	});
+
+	it('marks sync degraded and skips CSV output when the issue ledger state cannot be persisted', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockWriteJson.mockImplementation(async (path: string) => {
+			if (path === 'GitCode Issues/meta/issue-ledger-state.json') {
+				throw new Error('state store unavailable');
+			}
+		});
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).not.toHaveBeenCalled();
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				syncStatus: 'degraded',
+				repositorySyncStatus: 'degraded',
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to write issue ledger: state store unavailable'),
+				]),
+			}),
+		);
+	});
+
+	it('marks sync degraded when the issue ledger CSV cannot be persisted', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockUpsertTextFile.mockRejectedValueOnce(new Error('CSV store unavailable'));
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockWriteJson).toHaveBeenNthCalledWith(
+			2,
+			'GitCode Issues/meta/issue-ledger-state.json',
+			expect.objectContaining({
+				nextSerial: 2,
+				serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+			}),
+		);
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				syncStatus: 'degraded',
+				repositorySyncStatus: 'degraded',
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to write issue ledger: CSV store unavailable'),
+				]),
+			}),
+		);
+	});
+
+	it('normalizes GitHub-style issues that use html_url login and object labels', async () => {
+		const settings = makeSettings({
+			gitlabUrl: 'https://github.com',
+			apiBaseUrl: 'https://api.github.com',
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a'],
+			classificationRules: {
+				titlePrefixes: {
+					'[BUG]': 'bug',
+					'[需求]': 'requirement',
+				},
+				titleKeywords: {
+					support: 'requirement',
+				},
+				labels: {
+					bug: 'bug',
+				},
+			} as GitlabIssuesSettings['classificationRules'],
+		});
+		mockResolveRepoNames.mockResolvedValueOnce(['repo-a']);
+		mockLoadRepoIssues.mockResolvedValueOnce([
+			{
+				id: 501,
+				iid: 9,
+				number: 9,
+				state: 'open',
+				title: 'support github issue normalization',
+				description: 'compatibility check',
+				due_date: '',
+				project_id: 0,
+				created_at: '2026-06-17T19:07:15Z',
+				updated_at: '2026-06-17T19:07:15Z',
+				html_url: 'https://github.com/CPF-KMP-CMP/repo-a/issues/9',
+				labels: {
+					bug: 'bug',
+					P1: 'P1',
+				},
+				user: {
+					id: 11,
+					login: 'octocat',
+					name: 'Octo Cat',
+					avatar_url: '',
+					html_url: 'https://github.com/octocat',
+				},
+				repository: {
+					id: '42',
+					full_name: 'CPF-KMP-CMP/repo-a',
+					name: 'repo-a',
+				},
+				issue_type: 'issue',
+			} as Issue,
+		]);
+		mockReadIssueNotes.mockResolvedValueOnce([
+			{
+				id: 501,
+				iid: 9,
+				title: 'support github issue normalization',
+				state: 'open',
+				createdAt: '2026-06-17T19:07:15Z',
+				updatedAt: '2026-06-17T19:07:15Z',
+				webUrl: 'https://github.com/CPF-KMP-CMP/repo-a/issues/9',
+				projectId: 0,
+				projectPath: 'CPF-KMP-CMP/repo-a',
+				sourceScope: 'project',
+				sourceRepo: 'repo-a',
+				authorUsername: 'octocat',
+				authorName: 'Octo Cat',
+				isInternalAuthor: false,
+				internalMatchedBy: 'none',
+				labels: ['bug', 'P1'],
+				issueTypeRaw: 'issue',
+				requestKind: 'bug',
+				requestKindMatchedBy: 'label',
+				referencesFull: 'CPF-KMP-CMP/repo-a#9',
+			},
+		]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockWriteIssueNotes).toHaveBeenCalledWith([
+			expect.objectContaining<Partial<NormalizedIssueNote>>({
+				id: 501,
+				iid: 9,
+				webUrl: 'https://github.com/CPF-KMP-CMP/repo-a/issues/9',
+				projectId: 0,
+				projectPath: 'CPF-KMP-CMP/repo-a',
+				sourceRepo: 'repo-a',
+				authorUsername: 'octocat',
+				authorName: 'Octo Cat',
+				labels: ['bug', 'P1'],
+				requestKind: 'bug',
+				requestKindMatchedBy: 'label',
+				referencesFull: 'CPF-KMP-CMP/repo-a#9',
+			}),
+		]);
 	});
 });

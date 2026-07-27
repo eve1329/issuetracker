@@ -1,6 +1,6 @@
 import {App, normalizePath, PluginSettingTab, Setting} from "obsidian";
 import GitlabIssuesPlugin from "../main";
-import {getSettingsUi} from "./settings";
+import {detectGitHost, getSettingsUi} from "./settings";
 import {GitlabIssuesLevel, GitlabRefreshInterval} from "./settings-types";
 
 
@@ -22,12 +22,14 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 			settingInputs,
 			dropdowns,
 			checkBoxInputs,
-			gitlabDocumentation,
 			getGitlabIssuesLevel,
 			getGitlabIdLinkText,
 			getGitlabIdSettingName,
+			getGitlabDocumentation,
 			moreInformationTitle
 		} = currentUi;
+		const currentHost = detectGitHost(this.plugin.settings.gitlabUrl, this.plugin.settings.apiBaseUrl);
+		const gitlabDocumentation = getGitlabDocumentation(currentHost);
 
 		containerEl.empty();
 		new Setting(containerEl)
@@ -127,7 +129,7 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 		});
 
 		if (this.plugin.settings.gitlabIssuesLevel !== "personal") {
-			const gitlabIssuesLevelIdObject = getGitlabIssuesLevel(this.plugin.settings.gitlabIssuesLevel);
+			const gitlabIssuesLevelIdObject = getGitlabIssuesLevel(this.plugin.settings.gitlabIssuesLevel, currentHost);
 			const descriptionDocumentFragment = document.createDocumentFragment();
 			const descriptionLinkElement = descriptionDocumentFragment.createEl('a', {
 				href: gitlabIssuesLevelIdObject.url,

@@ -24,5 +24,5 @@ project: {{references.full}}
 
 {{{description}}}
 
-[Open in GitCode]({{web_url}})
+[Open Issue]({{web_url}})
 `;

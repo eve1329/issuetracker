@@ -9,6 +9,9 @@ import {classifyIssue, matchInternalAuthor} from "../Classification/classificati
 import {NormalizedIssueNote} from "../Issues/issue-note";
 import {buildDailyReport, buildDailyReportMarkdown} from "../Reports/daily-report-builder";
 import {buildAiBriefMarkdown} from "../Reports/ai-brief-builder";
+import {buildIssueLedger, IssueLedgerSerialState} from "../Reports/issue-ledger-builder";
+import {buildIssueLedgerXlsx} from "../Reports/issue-ledger-xlsx-builder";
+import {buildIssueClosureNotice, IssueClosureState} from "../Reports/issue-closure-notice-builder";
 import {logger} from "../utils/utils";
 
 interface SyncState {
@@ -144,10 +147,11 @@ export default class SyncService {
 			? 'degraded'
 			: 'success';
 		let reportWriteFailed = false;
+		let persistedNotes: NormalizedIssueNote[] | null = null;
 
 		if (this.settings.generateDailyReports) {
 			try {
-				const persistedNotes = await this.fs.readIssueNotes();
+				persistedNotes = await this.fs.readIssueNotes();
 				const provisionalStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded' || repositorySyncStatus === 'degraded'
 					? 'degraded'
 					: 'success';
@@ -184,6 +188,60 @@ export default class SyncService {
 			repositorySyncStatus = 'degraded';
 		}
 
+		let ledgerWriteFailed = false;
+		try {
+			persistedNotes ??= await this.fs.readIssueNotes();
+			const previousSerialState = await this.fs.readJson<IssueLedgerSerialState>(
+				`${this.settings.metaFolder}/issue-ledger-state.json`,
+			);
+			const ledger = buildIssueLedger(persistedNotes, {
+				internalMemberDirectory: this.settings.internalMemberDirectory,
+				internalUserWhitelist: this.settings.internalUserWhitelist,
+				startMonth: this.settings.issueLedgerStartMonth,
+			}, previousSerialState);
+
+			// Persist allocation first so a CSV write retry cannot assign a different serial.
+			await this.fs.writeJson(`${this.settings.metaFolder}/issue-ledger-state.json`, ledger.serialState);
+			await this.fs.upsertTextFile(`${this.settings.reportsFolder}/issue-ledger.csv`, ledger.csv);
+			await this.fs.writeBinary(`${this.settings.reportsFolder}/issue-ledger.xlsx`, buildIssueLedgerXlsx(ledger.rows));
+		} catch (error) {
+			ledgerWriteFailed = true;
+			const message = `Failed to write issue ledger: ${this.getErrorMessage(error)}`;
+			warningMessages.push(message);
+			logger(message);
+		}
+
+		if (ledgerWriteFailed) {
+			repositorySyncStatus = 'degraded';
+		}
+
+		let closureNoticeWriteFailed = false;
+		try {
+			persistedNotes ??= await this.fs.readIssueNotes();
+			const previousClosureState = await this.fs.readJson<IssueClosureState>(
+				`${this.settings.metaFolder}/issue-closure-state.json`,
+			);
+			const closureNotice = buildIssueClosureNotice(persistedNotes, previousClosureState, {
+				startMonth: this.settings.issueLedgerStartMonth,
+			});
+
+			const hadClosedIssues = (previousClosureState?.closedIssueKeys ?? []).length > 0;
+			if (closureNotice.currentlyClosed.length > 0 || hadClosedIssues) {
+				// Only advance the reminder baseline after the user-visible document is durable.
+				await this.fs.upsertTextFile(`${this.settings.reportsFolder}/issue-close-reminders.md`, closureNotice.markdown);
+				await this.fs.writeJson(`${this.settings.metaFolder}/issue-closure-state.json`, closureNotice.state);
+			}
+		} catch (error) {
+			closureNoticeWriteFailed = true;
+			const message = `Failed to write issue closure reminder: ${this.getErrorMessage(error)}`;
+			warningMessages.push(message);
+			logger(message);
+		}
+
+		if (closureNoticeWriteFailed) {
+			repositorySyncStatus = 'degraded';
+		}
+
 		const syncStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded'
 			|| repositorySyncStatus === 'degraded'
 			? 'degraded'
@@ -209,11 +267,11 @@ export default class SyncService {
 		internalMembers: InternalMemberIndex,
 		existingNotesByKey: Map<string, NormalizedIssueNote> = new Map(),
 	): NormalizedIssueNote {
-		const authorUsername = issue.author?.username ?? issue.user?.login ?? '';
+		const authorUsername = issue.author?.username ?? issue.user?.login ?? issue.user?.username ?? '';
 		const authorName = issue.author?.name ?? issue.user?.name ?? '';
 		const iid = this.resolveIssueIid(issue);
 		const webUrl = issue.web_url ?? issue.html_url ?? '';
-		const projectId = issue.project_id ?? issue.repository?.id ?? 0;
+		const projectId = this.resolveProjectId(issue);
 		const internalAuthor = matchInternalAuthor(authorUsername, internalMembers);
 		const classification = classifyIssue(issue, this.settings.classificationRules);
 		const issueKey = this.buildIssueKey(repoName, iid);
@@ -241,8 +299,8 @@ export default class SyncService {
 			authorName,
 			isInternalAuthor: internalAuthor.isInternalAuthor,
 			internalMatchedBy: internalAuthor.internalMatchedBy,
-			labels: issue.labels,
-			issueTypeRaw: issue.issue_type,
+			labels: this.normalizeLabels(issue.labels),
+			issueTypeRaw: issue.issue_type ?? '',
 			requestKind,
 			requestKindMatchedBy,
 			referencesFull: this.resolveReferencesFull(issue, repoName),
@@ -336,6 +394,33 @@ export default class SyncService {
 		}
 
 		return issue.id;
+	}
+
+	private resolveProjectId(issue: Issue) {
+		if (typeof issue.project_id === 'number') {
+			return issue.project_id;
+		}
+
+		if (typeof issue.repository?.id === 'number') {
+			return issue.repository.id;
+		}
+
+		if (typeof issue.repository?.id === 'string') {
+			const parsed = Number(issue.repository.id);
+			if (Number.isFinite(parsed)) {
+				return parsed;
+			}
+		}
+
+		return 0;
+	}
+
+	private normalizeLabels(labels: Issue['labels']) {
+		if (Array.isArray(labels)) {
+			return labels.map((label) => String(label));
+		}
+
+		return Object.keys(labels ?? {});
 	}
 
 	private getErrorMessage(error: unknown) {

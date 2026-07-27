@@ -148,4 +148,46 @@ describe('GitlabApi', () => {
 			throw: false,
 		});
 	});
+
+	it('uses GitHub bearer headers for GitHub API requests', async () => {
+		const mockResponse = {
+			status: 200,
+			json: Promise.resolve([]),
+			text: 'Success',
+		};
+
+		mockRequestUrl.mockResolvedValue(mockResponse as RequestUrlResponse);
+
+		await GitlabApi.load('https://api.github.com/repos/openai/codex/issues', mockToken);
+
+		expect(mockRequestUrl).toHaveBeenCalledWith({
+			url: 'https://api.github.com/repos/openai/codex/issues',
+			headers: {
+				Authorization: `Bearer ${mockToken}`,
+				Accept: 'application/vnd.github+json',
+				'X-GitHub-Api-Version': '2022-11-28',
+			},
+			throw: false,
+		});
+	});
+
+	it('adds a gitee access_token query parameter for Gitee API requests', async () => {
+		const mockResponse = {
+			status: 200,
+			json: Promise.resolve([]),
+			text: 'Success',
+		};
+
+		mockRequestUrl.mockResolvedValue(mockResponse as RequestUrlResponse);
+
+		await GitlabApi.load('https://gitee.com/api/v5/repos/openai/codex/issues', mockToken);
+
+		expect(mockRequestUrl).toHaveBeenCalledWith({
+			url: 'https://gitee.com/api/v5/repos/openai/codex/issues?access_token=mock-token',
+			headers: {
+				Authorization: `token ${mockToken}`,
+			},
+			throw: false,
+		});
+	});
 });

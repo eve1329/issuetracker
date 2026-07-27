@@ -10,7 +10,7 @@ export function buildAiBriefMarkdown(report: DailyReport): string {
 	const unknownIssues = report.unknownIssues.map((issue) => `- ${issue.sourceRepo} #${issue.iid}: ${issue.title}`);
 
 	return [
-		`# GitCode Issue Daily Brief - ${report.date}`,
+		`# Issue Daily Brief - ${report.date}`,
 		'',
 		'## Summary Data',
 		`- New bugs: ${report.newBugCount}`,

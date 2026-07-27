@@ -3,12 +3,11 @@ import {
 	GitCodeMember,
 	InternalMemberIndex,
 	InternalMemberLoadResult,
-	InternalMemberRecord,
 	RepoCollaboratorSyncState,
 	RepoCollaboratorSyncStatus,
 } from "./member-types";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
-import {getGitlabApiVersion} from "../SettingsTab/settings";
+import {detectGitHost, getGitlabApiVersion} from "../SettingsTab/settings";
 
 export default class MemberLoader {
 	private static readonly MAX_REPOS_PER_RUN = 12;
@@ -23,10 +22,19 @@ export default class MemberLoader {
 		return this.settings.gitlabApiUrl().replace(/\/+$/, '');
 	}
 
+	private getHost() {
+		return detectGitHost(this.settings.gitlabUrl, this.settings.apiBaseUrl);
+	}
+
 	private getRepoCollaboratorsUrl(repoName: string) {
 		const apiBaseUrl = this.getApiBaseUrl();
 		const encodedOrgName = encodeURIComponent(this.settings.orgName);
 		const encodedRepoName = encodeURIComponent(repoName);
+		const host = this.getHost();
+
+		if (host === 'github' || host === 'gitee') {
+			return `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/collaborators`;
+		}
 
 		if (getGitlabApiVersion(apiBaseUrl) === 'v4') {
 			const projectId = encodeURIComponent(`${this.settings.orgName}/${repoName}`);
@@ -177,7 +185,7 @@ export default class MemberLoader {
 	private extractRepoUsernames(collaborators: GitCodeMember[]) {
 		return Array.from(new Set(
 			collaborators
-				.map((member) => member.username?.trim())
+				.map((member) => member.username?.trim() || member.login?.trim())
 				.filter((username): username is string => Boolean(username)),
 		));
 	}

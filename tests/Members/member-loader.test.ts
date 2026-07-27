@@ -62,6 +62,32 @@ describe('MemberLoader', () => {
 		);
 	});
 
+	it('uses the GitHub collaborators endpoint layout when configured against GitHub', async () => {
+		mockLoadAllPages.mockResolvedValueOnce([{login: 'repo_user'}]);
+
+		const loader = new MemberLoader({
+			...DEFAULT_SETTINGS,
+			gitlabUrl: 'https://github.com',
+			apiBaseUrl: 'https://api.github.com',
+			orgName: 'CPF-KMP-CMP',
+			repoList: ['repo-a'],
+			internalUserWhitelist: [],
+		});
+
+		const result = await loader.loadInternalMemberIndex();
+
+		expect(result.index.usernames.repo_user).toEqual({
+			username: 'repo_user',
+			source: 'repo',
+			repo: 'repo-a',
+		});
+		expect(mockLoadAllPages).toHaveBeenNthCalledWith(
+			1,
+			'https://api.github.com/repos/CPF-KMP-CMP/repo-a/collaborators',
+			'',
+		);
+	});
+
 	it('keeps the first repo collaborator source when the same username appears multiple times', async () => {
 		mockLoadAllPages
 			.mockResolvedValueOnce([{username: 'shared_user'}])

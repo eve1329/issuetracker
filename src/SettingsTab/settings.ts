@@ -1,4 +1,70 @@
-import {GitlabIssuesSettings, SettingsTab, UiLanguage} from "./settings-types";
+import {GitlabIssuesSettings, SettingsTab, SupportedGitHost, UiLanguage} from "./settings-types";
+
+export function detectGitHost(gitlabUrl: string, apiBaseUrl?: string): SupportedGitHost {
+	const combined = `${gitlabUrl} ${apiBaseUrl ?? ''}`.toLowerCase();
+
+	if (combined.includes('github.com') || combined.includes('api.github.com')) {
+		return 'github';
+	}
+
+	if (combined.includes('gitee.com')) {
+		return 'gitee';
+	}
+
+	if (combined.includes('gitcode.com')) {
+		return 'gitcode';
+	}
+
+	if (combined.includes('gitlab')) {
+		return 'gitlab';
+	}
+
+	return 'unknown';
+}
+
+interface HostDocumentation {
+	repoScopeUrl: string;
+	groupScopeUrl: string;
+	issuesApiUrl: string;
+	displayName: string;
+}
+
+const HOST_DOCUMENTATION: Record<SupportedGitHost, HostDocumentation> = {
+	gitcode: {
+		repoScopeUrl: 'https://docs.gitcode.com/en/docs/repos/',
+		groupScopeUrl: 'https://docs.gitcode.com/en/docs/orgs/',
+		issuesApiUrl: 'https://docs.gitcode.com/en/docs/repos/issues/',
+		displayName: 'GitCode',
+	},
+	gitlab: {
+		repoScopeUrl: 'https://docs.gitlab.com/api/projects/',
+		groupScopeUrl: 'https://docs.gitlab.com/api/groups/',
+		issuesApiUrl: 'https://docs.gitlab.com/api/issues/',
+		displayName: 'GitLab',
+	},
+	github: {
+		repoScopeUrl: 'https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories',
+		groupScopeUrl: 'https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories',
+		issuesApiUrl: 'https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#list-repository-issues',
+		displayName: 'GitHub',
+	},
+	gitee: {
+		repoScopeUrl: 'https://gitee.com/api/v5/swagger#/getV5ReposOwnerRepoIssues',
+		groupScopeUrl: 'https://gitee.com/api/v5/swagger#/getV5OrgsOrgRepos',
+		issuesApiUrl: 'https://gitee.com/api/v5/swagger#/getV5ReposOwnerRepoIssues',
+		displayName: 'Gitee',
+	},
+	unknown: {
+		repoScopeUrl: 'https://docs.gitlab.com/api/projects/',
+		groupScopeUrl: 'https://docs.gitlab.com/api/groups/',
+		issuesApiUrl: 'https://docs.gitlab.com/api/issues/',
+		displayName: 'configured host',
+	},
+};
+
+export function getHostDocumentation(host: SupportedGitHost) {
+	return HOST_DOCUMENTATION[host];
+}
 
 export function getGitlabApiVersion(apiBaseUrl: string): 'v4' | 'v5' {
 	const normalizedApiBaseUrl = apiBaseUrl.trim().replace(/\/+$/, '');
@@ -27,6 +93,8 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	syncAllOrgRepos: false,
 	gitlabAppId: '',
 	internalUserWhitelist: [],
+	internalMemberDirectory: {},
+	issueLedgerStartMonth: '',
 	classificationRules: {
 		titlePrefixes: {
 			'[BUG]': 'bug',
@@ -43,22 +111,36 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 			'崩溃': 'bug',
 			'体积偏大': 'bug',
 			'UAF': 'bug',
+			'修复': 'bug',
+			'没有恢复': 'bug',
+			'避让键盘': 'bug',
+			'链接问题': 'bug',
 			'添加': 'requirement',
 			'手册': 'requirement',
 			'示例': 'requirement',
 			'支持': 'requirement',
 			'support': 'requirement',
 			'adapt': 'requirement',
+			'feat(': 'requirement',
+			'Implementation': 'requirement',
 			'改用': 'requirement',
 			'替换': 'requirement',
 			'适配': 'requirement',
 			'替代': 'requirement',
 			'前移': 'requirement',
 			'下沉': 'requirement',
+			'兼容': 'requirement',
+			'非兼容': 'requirement',
+			'编译兼容': 'requirement',
 			'零侵入': 'requirement',
+			'注释说明': 'requirement',
+			'不易理解': 'requirement',
 			'demo config': 'requirement',
 			'打印模块名称': 'requirement',
 			'自动化测试脚本': 'requirement',
+			'安全键盘': 'bug',
+			'页面上移高度不足': 'bug',
+			'遮挡': 'bug',
 		},
 		labels: {},
 	},
@@ -87,6 +169,8 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 		? rawData.issueFilter ?? ''
 		: rawData.filter ?? DEFAULT_SETTINGS.issueFilter;
 	const rawClassificationRules = rawData.classificationRules;
+	const internalMemberDirectory = normalizeInternalMemberDirectory(rawData.internalMemberDirectory);
+	const issueLedgerStartMonth = normalizeIssueLedgerStartMonth(rawData.issueLedgerStartMonth);
 	const classificationRules = {
 		titlePrefixes: {
 			...DEFAULT_SETTINGS.classificationRules.titlePrefixes,
@@ -104,10 +188,29 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 
 	return {
 		...mergedSettings,
+		internalMemberDirectory,
+		issueLedgerStartMonth,
 		classificationRules,
 		issueFilter: canonicalFilter,
 		filter: canonicalFilter,
 	};
+}
+
+function normalizeIssueLedgerStartMonth(value: unknown) {
+	const startMonth = typeof value === 'string' ? value.trim() : '';
+	return /^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth) ? startMonth : '';
+}
+
+function normalizeInternalMemberDirectory(directory: unknown): Record<string, string> {
+	if (!directory || typeof directory !== 'object' || Array.isArray(directory)) {
+		return {};
+	}
+
+	return Object.fromEntries(
+		Object.entries(directory)
+			.filter(([username, name]) => username.trim().length > 0 && typeof name === 'string')
+			.map(([username, name]) => [username.trim(), name.trim()]),
+	);
 }
 
 const SHARED_OPTIONS = {
@@ -128,20 +231,20 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 		},
 		settingInputs: [{
-			title: 'GitCode Instance URL',
-			description: 'Base URL for your GitCode instance.',
+			title: 'Git Host URL',
+			description: 'Base URL for the Git host you want to sync from.',
 			placeholder: 'https://gitcode.com',
 			value: "gitlabUrl",
 		},
 			{
 				title: 'API Base URL',
-				description: 'Override the GitCode API base URL when needed.',
+				description: 'Override the host API base URL when needed.',
 				placeholder: 'https://gitcode.com/api/v5',
 				value: 'apiBaseUrl',
 			},
 			{
 				title: 'Personal Access Token',
-				description: 'Create a personal access token in your GitCode account and enter it here.',
+				description: 'Create a personal access token for the configured host and enter it here.',
 				placeholder: 'Token',
 				value: "gitlabToken"
 			},
@@ -160,7 +263,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: 'Organization Name',
-				description: 'The GitCode organization that owns the repositories.',
+				description: 'The organization, owner, or group that owns the repositories.',
 				placeholder: 'CPF-KMP-CMP',
 				value: 'orgName'
 			},
@@ -179,6 +282,20 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'internalUserWhitelist',
 				modifier: 'stringArray',
 				inputType: 'textarea'
+			},
+			{
+				title: 'Internal Member Directory',
+				description: 'Manual GitCode account-to-name mapping for the issue ledger. Listed accounts are internal.',
+				placeholder: '{\n  "alice": "Alice"\n}',
+				value: 'internalMemberDirectory',
+				modifier: 'json',
+				inputType: 'textarea'
+			},
+			{
+				title: 'Issue Ledger Start Month',
+				description: 'Only include issues created in this month or later. Use YYYY-MM; leave empty to include all dates.',
+				placeholder: '2026-07',
+				value: 'issueLedgerStartMonth'
 			},
 			{
 				title: 'Classification Rules',
@@ -211,14 +328,14 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: "Issues Filter",
-				description: 'Raw query string appended to GitCode issue list endpoints.',
+				description: 'Raw query string appended to issue list endpoints for the configured host.',
 				placeholder: '',
 				value: 'issueFilter'
 			}
 		],
 		dropdowns: [{
 			title: 'Refresh Rate',
-			description: "How often IssueTracker should refresh GitCode issues.",
+			description: "How often IssueTracker should refresh issues.",
 			options: SHARED_OPTIONS.refreshRates,
 			value: "intervalOfRefresh",
 		},
@@ -230,7 +347,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			}
 		],
 		checkBoxInputs: [{
-			title: 'Purge generated issues that are no longer returned by GitCode?',
+			title: 'Purge generated issues that are no longer returned by the configured host?',
 			value: "purgeIssues",
 		},
 			{
@@ -250,17 +367,21 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'syncAllOrgRepos'
 			}
 		],
-		getGitlabIssuesLevel: (currentLevel) => {
+		getGitlabIssuesLevel: (currentLevel, host) => {
+			const docs = getHostDocumentation(host);
 			return currentLevel === 'group'
-				? {title: "Organization", url: "https://docs.gitcode.com/en/docs/orgs/"}
-				: {title: "Repository", url: "https://docs.gitcode.com/en/docs/repos/"};
+				? {title: "Organization", url: docs.groupScopeUrl}
+				: {title: "Repository", url: docs.repoScopeUrl};
 		},
 		getGitlabIdSettingName: (currentLevelTitle) => `Set ${currentLevelTitle} identifier`,
-		getGitlabIdLinkText: (currentLevelTitle) => `Open the GitCode ${currentLevelTitle} docs.`,
+		getGitlabIdLinkText: (currentLevelTitle) => `Open the ${currentLevelTitle} documentation.`,
 		moreInformationTitle: 'References',
-		gitlabDocumentation: {
-			title: 'View the GitCode issues API documentation',
-			url: 'https://docs.gitcode.com/en/docs/repos/issues/'
+		getGitlabDocumentation: (host) => {
+			const docs = getHostDocumentation(host);
+			return {
+				title: `View the ${docs.displayName} issues API documentation`,
+				url: docs.issuesApiUrl,
+			};
 		}
 	},
 	'zh-CN': {
@@ -274,20 +395,20 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 		},
 		settingInputs: [{
-			title: 'GitCode 实例地址',
-			description: 'GitCode 实例基础地址。如果不是使用公共的 gitcode.com，可在这里替换。',
+			title: 'Git 主机地址',
+			description: '需要同步的 Git 主机基础地址。',
 			placeholder: 'https://gitcode.com',
 			value: "gitlabUrl",
 		},
 			{
 				title: 'API 基础地址',
-				description: '需要时可覆盖 GitCode API 的基础地址。',
+				description: '需要时可覆盖当前主机 API 的基础地址。',
 				placeholder: 'https://gitcode.com/api/v5',
 				value: 'apiBaseUrl',
 			},
 			{
 				title: '个人访问令牌',
-				description: '在你的 GitCode 账户中创建 personal access token，并填写到这里。',
+				description: '在当前主机上创建 personal access token，并填写到这里。',
 				placeholder: 'Token',
 				value: "gitlabToken"
 			},
@@ -306,7 +427,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: '组织名称',
-				description: '拥有这些仓库的 GitCode 组织名。',
+				description: '拥有这些仓库的组织、owner 或 group 名称。',
 				placeholder: 'CPF-KMP-CMP',
 				value: 'orgName'
 			},
@@ -325,6 +446,20 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'internalUserWhitelist',
 				modifier: 'stringArray',
 				inputType: 'textarea'
+			},
+			{
+				title: '内部成员目录',
+				description: '用于 issue 台账的 GitCode 账号到姓名人工映射，目录中的账号会视为内部人员。',
+				placeholder: '{\n  "alice": "Alice"\n}',
+				value: 'internalMemberDirectory',
+				modifier: 'json',
+				inputType: 'textarea'
+			},
+			{
+				title: 'Issue 台账开始月份',
+				description: '仅导出该月份及之后创建的 issue，格式为 YYYY-MM；留空则不过滤创建时间。修改月份会重新建立台账序号。',
+				placeholder: '2026-07',
+				value: 'issueLedgerStartMonth'
 			},
 			{
 				title: '分类规则',
@@ -357,14 +492,14 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: "Issues 过滤条件",
-				description: '附加到 GitCode issue 列表接口后的原始查询字符串。',
+				description: '附加到当前主机 issue 列表接口后的原始查询字符串。',
 				placeholder: '',
 				value: 'issueFilter'
 			}
 		],
 		dropdowns: [{
 			title: '刷新频率',
-			description: "IssueTracker 拉取 GitCode issues 的频率。",
+			description: "IssueTracker 拉取 issues 的频率。",
 			options: SHARED_OPTIONS.refreshRates,
 			value: "intervalOfRefresh",
 		},
@@ -376,7 +511,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			}
 		],
 		checkBoxInputs: [{
-			title: '清理 GitCode 中已不再返回的生成 issue？',
+			title: '清理当前主机中已不再返回的生成 issue？',
 			value: "purgeIssues",
 		},
 			{
@@ -396,17 +531,21 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'syncAllOrgRepos'
 			}
 		],
-		getGitlabIssuesLevel: (currentLevel) => {
+		getGitlabIssuesLevel: (currentLevel, host) => {
+			const docs = getHostDocumentation(host);
 			return currentLevel === 'group'
-				? {title: "组织", url: "https://docs.gitcode.com/docs/orgs/"}
-				: {title: "仓库", url: "https://docs.gitcode.com/docs/repos/"};
+				? {title: "组织", url: docs.groupScopeUrl}
+				: {title: "仓库", url: docs.repoScopeUrl};
 		},
 		getGitlabIdSettingName: (currentLevelTitle) => `设置${currentLevelTitle}标识`,
-		getGitlabIdLinkText: (currentLevelTitle) => `打开 GitCode ${currentLevelTitle}文档。`,
+		getGitlabIdLinkText: (currentLevelTitle) => `打开${currentLevelTitle}文档。`,
 		moreInformationTitle: '参考文档',
-		gitlabDocumentation: {
-			title: '查看 GitCode issues API 文档',
-			url: 'https://docs.gitcode.com/docs/repos/issues/'
+		getGitlabDocumentation: (host) => {
+			const docs = getHostDocumentation(host);
+			return {
+				title: `查看 ${docs.displayName} issues API 文档`,
+				url: docs.issuesApiUrl,
+			};
 		}
 	}
 };

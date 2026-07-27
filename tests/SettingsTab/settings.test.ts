@@ -1,7 +1,9 @@
 import {GitlabIssuesSettings} from "../../src/SettingsTab/settings-types";
 import {
+	detectGitHost,
 	DEFAULT_SETTINGS,
 	getGitlabApiVersion,
+	getHostDocumentation,
 	getSettingsUi,
 	normalizeSettings,
 	resolveGitlabApiBaseUrl,
@@ -21,6 +23,8 @@ describe('DEFAULT_SETTINGS', () => {
 			syncAllOrgRepos: false,
 			gitlabAppId: '',
 			internalUserWhitelist: [],
+			internalMemberDirectory: {},
+			issueLedgerStartMonth: '',
 			classificationRules: {
 				titlePrefixes: {
 					'[BUG]': 'bug',
@@ -32,15 +36,22 @@ describe('DEFAULT_SETTINGS', () => {
 					'手册': 'requirement',
 					'示例': 'requirement',
 					'支持': 'requirement',
+					'注释说明': 'requirement',
+					'不易理解': 'requirement',
 					'demo config': 'requirement',
 					'support': 'requirement',
 					'adapt': 'requirement',
+					'feat(': 'requirement',
+					'Implementation': 'requirement',
 					'改用': 'requirement',
 					'替换': 'requirement',
 					'适配': 'requirement',
 					'替代': 'requirement',
 					'前移': 'requirement',
 					'下沉': 'requirement',
+					'兼容': 'requirement',
+					'非兼容': 'requirement',
+					'编译兼容': 'requirement',
 					'零侵入': 'requirement',
 					'打印模块名称': 'requirement',
 					'自动化测试脚本': 'requirement',
@@ -53,6 +64,13 @@ describe('DEFAULT_SETTINGS', () => {
 					'崩溃': 'bug',
 					'体积偏大': 'bug',
 					'UAF': 'bug',
+					'修复': 'bug',
+					'没有恢复': 'bug',
+					'避让键盘': 'bug',
+					'链接问题': 'bug',
+					'安全键盘': 'bug',
+					'页面上移高度不足': 'bug',
+					'遮挡': 'bug',
 				},
 				labels: {},
 			},
@@ -82,6 +100,13 @@ describe('DEFAULT_SETTINGS', () => {
 		expect(getGitlabApiVersion('https://gitlab.example.com/api/v4')).toBe('v4');
 	});
 
+	it('detects the configured host from URL settings', () => {
+		expect(detectGitHost('https://github.com', 'https://api.github.com')).toBe('github');
+		expect(detectGitHost('https://gitee.com', 'https://gitee.com/api/v5')).toBe('gitee');
+		expect(detectGitHost('https://gitlab.example.com', 'https://gitlab.example.com/api/v4')).toBe('gitlab');
+		expect(detectGitHost('https://gitcode.com', 'https://gitcode.com/api/v5')).toBe('gitcode');
+	});
+
 	it('keeps an explicit API base URL as-is when it already points at /api/v4', () => {
 		expect(resolveGitlabApiBaseUrl('https://gitlab.example.com', 'https://gitlab.example.com/api/v4'))
 			.toBe('https://gitlab.example.com/api/v4');
@@ -107,11 +132,16 @@ describe('DEFAULT_SETTINGS', () => {
 			'添加': 'requirement',
 			'前移': 'requirement',
 			'自动化测试脚本': 'requirement',
+			'不易理解': 'requirement',
+			'注释说明': 'requirement',
 			'demo config': 'requirement',
 			'support': 'requirement',
 			'fix:': 'bug',
 			'fix(': 'bug',
 			'崩溃': 'bug',
+			'安全键盘': 'bug',
+			'页面上移高度不足': 'bug',
+			'遮挡': 'bug',
 		});
 	});
 });
@@ -146,6 +176,24 @@ describe('settings', () => {
 		expect(normalized.filter).toBe('');
 	});
 
+	it('normalizes the internal member directory to string account-to-name mappings', () => {
+		const normalized = normalizeSettings({
+			internalMemberDirectory: {
+				' Dev_A ': ' 开发甲 ',
+				invalid: 123 as any,
+				'': 'ignored',
+			},
+		});
+
+		expect(normalized.internalMemberDirectory).toEqual({Dev_A: '开发甲'});
+	});
+
+	it('accepts a valid issue ledger start month and rejects invalid values', () => {
+		expect(normalizeSettings({issueLedgerStartMonth: '2026-05'}).issueLedgerStartMonth).toBe('2026-05');
+		expect(normalizeSettings({issueLedgerStartMonth: '2026-5'}).issueLedgerStartMonth).toBe('');
+		expect(normalizeSettings({issueLedgerStartMonth: '2026-13'}).issueLedgerStartMonth).toBe('');
+	});
+
 	it('deep-merges classification rules so saved overrides keep new default keyword rules', () => {
 		const normalized = normalizeSettings({
 			classificationRules: {
@@ -171,11 +219,16 @@ describe('settings', () => {
 			'添加': 'requirement',
 			'前移': 'requirement',
 			'自动化测试脚本': 'requirement',
+			'不易理解': 'requirement',
+			'注释说明': 'requirement',
 			'demo config': 'requirement',
 			'support': 'requirement',
 			'fix:': 'bug',
 			'fix(': 'bug',
 			'崩溃': 'bug',
+			'安全键盘': 'bug',
+			'页面上移高度不足': 'bug',
+			'遮挡': 'bug',
 		});
 	});
 
@@ -205,36 +258,36 @@ describe('settings', () => {
 			options: { personal: '个人', project: '项目', group: '组织' },
 			value: 'gitlabIssuesLevel',
 		});
-		expect(zhSettings.getGitlabIssuesLevel('project')).toEqual({
+		expect(zhSettings.getGitlabIssuesLevel('project', 'gitcode')).toEqual({
 			title: '仓库',
-			url: 'https://docs.gitcode.com/docs/repos/',
+			url: 'https://docs.gitcode.com/en/docs/repos/',
 		});
 		expect(zhSettings.getGitlabIdSettingName('仓库')).toBe('设置仓库标识');
-		expect(zhSettings.getGitlabIdLinkText('仓库')).toBe('打开 GitCode 仓库文档。');
+		expect(zhSettings.getGitlabIdLinkText('仓库')).toBe('打开仓库文档。');
 		expect(zhSettings.moreInformationTitle).toBe('参考文档');
-		expect(zhSettings.gitlabDocumentation).toEqual({
+		expect(zhSettings.getGitlabDocumentation('gitcode')).toEqual({
 			title: '查看 GitCode issues API 文档',
-			url: 'https://docs.gitcode.com/docs/repos/issues/',
+			url: 'https://docs.gitcode.com/en/docs/repos/issues/',
 		});
 	});
 
 	it('should have the correct setting inputs', () => {
 		const expectedSettingInputs = [
 			{
-				title: 'GitCode Instance URL',
-				description: 'Base URL for your GitCode instance.',
+				title: 'Git Host URL',
+				description: 'Base URL for the Git host you want to sync from.',
 				placeholder: 'https://gitcode.com',
 				value: 'gitlabUrl',
 			},
 			{
 				title: 'API Base URL',
-				description: 'Override the GitCode API base URL when needed.',
+				description: 'Override the host API base URL when needed.',
 				placeholder: 'https://gitcode.com/api/v5',
 				value: 'apiBaseUrl',
 			},
 			{
 				title: 'Personal Access Token',
-				description: 'Create a personal access token in your GitCode account and enter it here.',
+				description: 'Create a personal access token for the configured host and enter it here.',
 				placeholder: 'Token',
 				value: 'gitlabToken',
 			},
@@ -253,7 +306,7 @@ describe('settings', () => {
 			},
 			{
 				title: 'Organization Name',
-				description: 'The GitCode organization that owns the repositories.',
+				description: 'The organization, owner, or group that owns the repositories.',
 				placeholder: 'CPF-KMP-CMP',
 				value: 'orgName',
 			},
@@ -272,6 +325,20 @@ describe('settings', () => {
 				value: 'internalUserWhitelist',
 				modifier: 'stringArray',
 				inputType: 'textarea',
+			},
+			{
+				title: 'Internal Member Directory',
+				description: 'Manual GitCode account-to-name mapping for the issue ledger. Listed accounts are internal.',
+				placeholder: '{\n  "alice": "Alice"\n}',
+				value: 'internalMemberDirectory',
+				modifier: 'json',
+				inputType: 'textarea',
+			},
+			{
+				title: 'Issue Ledger Start Month',
+				description: 'Only include issues created in this month or later. Use YYYY-MM; leave empty to include all dates.',
+				placeholder: '2026-07',
+				value: 'issueLedgerStartMonth',
 			},
 			{
 				title: 'Classification Rules',
@@ -304,13 +371,24 @@ describe('settings', () => {
 			},
 			{
 				title: 'Issues Filter',
-				description: 'Raw query string appended to GitCode issue list endpoints.',
+				description: 'Raw query string appended to issue list endpoints for the configured host.',
 				placeholder: '',
 				value: 'issueFilter',
 			},
 		];
 
 		expect(settings.settingInputs).toEqual(expectedSettingInputs);
+	});
+
+	it('exposes the internal member directory in Chinese settings', () => {
+		expect(getSettingsUi('zh-CN').settingInputs).toContainEqual({
+			title: '内部成员目录',
+			description: '用于 issue 台账的 GitCode 账号到姓名人工映射，目录中的账号会视为内部人员。',
+			placeholder: '{\n  "alice": "Alice"\n}',
+			value: 'internalMemberDirectory',
+			modifier: 'json',
+			inputType: 'textarea',
+		});
 	});
 
 	it('should expose the language selector config', () => {
@@ -328,7 +406,7 @@ describe('settings', () => {
 		const expectedDropdowns = [
 			{
 				title: 'Refresh Rate',
-				description: 'How often IssueTracker should refresh GitCode issues.',
+				description: 'How often IssueTracker should refresh issues.',
 				options: { off: 'off', '15': '15', '30': '30', '45': '45', '60': '60', '120': '120' },
 				value: 'intervalOfRefresh',
 			},
@@ -346,7 +424,7 @@ describe('settings', () => {
 	it('should have the correct checkBoxInputs', () => {
 		const expectedCheckBoxInputs = [
 			{
-				title: 'Purge generated issues that are no longer returned by GitCode?',
+				title: 'Purge generated issues that are no longer returned by the configured host?',
 				value: 'purgeIssues',
 			},
 				{
@@ -371,21 +449,34 @@ describe('settings', () => {
 	});
 
 	it('should correctly return IssueTracker scope information', () => {
-		expect(settings.getGitlabIssuesLevel('group')).toEqual({
+		expect(settings.getGitlabIssuesLevel('group', 'gitcode')).toEqual({
 			title: 'Organization',
 			url: 'https://docs.gitcode.com/en/docs/orgs/',
 		});
 
-		expect(settings.getGitlabIssuesLevel('project')).toEqual({
+		expect(settings.getGitlabIssuesLevel('project', 'gitcode')).toEqual({
 			title: 'Repository',
 			url: 'https://docs.gitcode.com/en/docs/repos/',
 		});
 	});
 
 	it('should have the correct Gitlab documentation information', () => {
-		expect(settings.gitlabDocumentation).toEqual({
+		expect(settings.getGitlabDocumentation('gitcode')).toEqual({
 			title: 'View the GitCode issues API documentation',
 			url: 'https://docs.gitcode.com/en/docs/repos/issues/',
+		});
+	});
+
+	it('returns host-specific documentation links for GitHub', () => {
+		expect(getHostDocumentation('github')).toEqual({
+			repoScopeUrl: 'https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories',
+			groupScopeUrl: 'https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28#list-organization-repositories',
+			issuesApiUrl: 'https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#list-repository-issues',
+			displayName: 'GitHub',
+		});
+		expect(settings.getGitlabDocumentation('github')).toEqual({
+			title: 'View the GitHub issues API documentation',
+			url: 'https://docs.github.com/en/rest/issues/issues?apiVersion=2022-11-28#list-repository-issues',
 		});
 	});
 });

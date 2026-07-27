@@ -64,9 +64,9 @@ export class GitlabIssue implements ObsidianIssue {
 
 	private resolveRepositoryContext(issue: Issue, orgName?: string, repoName?: string) {
 		const referenceContext = this.parseProjectPath(
-			typeof issue.references === 'string' ? undefined : issue.references.full,
+			typeof issue.references === 'string' || !issue.references ? undefined : issue.references.full,
 		);
-		const urlContext = this.parseProjectUrl(issue.web_url);
+		const urlContext = this.parseProjectUrl(issue.web_url ?? issue.html_url ?? '');
 
 		return {
 			orgName: this.pickProvidedValue(orgName, referenceContext?.orgName, urlContext?.orgName),

@@ -2,6 +2,13 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.1 - 2026-07-27
+
+- Added a 13-column issue ledger with stable serial allocation, category/source classification, and retention of previously tracked issues after closure.
+- Added raw-URL CSV and native-hyperlink XLSX ledger exports. The XLSX uses external hyperlink relationships instead of `HYPERLINK()` formulas for Tencent Docs imports.
+- Added a configurable `YYYY-MM` issue-ledger start month, which resets ledger serial state when changed.
+- Added a separate Markdown Issue-closure reminder with new-closure and current-closed sections, plus durable closure state for repeat-close detection.
+
 ## 0.2.0 - 2026-06-23
 
 - Added GitLab API v4 routing for repo issue sync, organization repo discovery, and collaborator sync while preserving the current GitCode v5 behavior.
