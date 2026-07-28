@@ -14,6 +14,7 @@ The current implementation is verified against GitCode and GitLab-style issue AP
 - Sync issues from selected repositories on supported hosts, or from every repository under a configured organization or group.
 - Persist each issue as a normalized Obsidian note under the configured issues folder.
 - Mark authors as internal or external by combining repository collaborator data with a manual whitelist.
+- Mark ledger entries as internal when their titles include one of the default internal workflow markers: `【fix】`, `【门禁测试】`, `【release】`, `【next】`, or `【需求】`.
 - Classify issues into `bug`, `requirement`, or `unknown` using configurable prefix, keyword, and label rules.
 - Generate machine-friendly daily reports and AI-friendly daily briefs.
 - Generate a 13-column issue ledger as both raw-URL CSV and native-hyperlink XLSX. The XLSX links are directly clickable after Tencent Docs import.
@@ -127,6 +128,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 从指定的仓库同步 issue，或者同步某个组织 / group 下的全部仓库。
 - 将每条 issue 规范化后保存到配置的 issues 目录。
 - 结合仓库协作者信息和手工白名单，把作者标记为内部或外部成员。
+- 当 issue 标题包含默认内部工作标记 `【fix】`、`【门禁测试】`、`【release】`、`【next】` 或 `【需求】` 时，将台账记录标记为内部。
 - 通过可配置的前缀、关键词和标签规则，把 issue 分类为 `bug`、`requirement` 或 `unknown`。
 - 生成便于机器处理的日报，以及适合 AI 消费的日报摘要。
 - 生成 13 列 issue 台账：CSV 保留原始 URL，XLSX 使用原生超链接，导入腾讯文档后可直接点击。

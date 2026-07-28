@@ -2,6 +2,10 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.2 - 2026-07-28
+
+- Mark ledger Issues as internal when their titles contain one of the configured internal workflow markers: `【fix】`, `【门禁测试】`, `【release】`, `【next】`, or `【需求】`.
+
 ## 0.2.1 - 2026-07-27
 
 - Added a 13-column issue ledger with stable serial allocation, category/source classification, and retention of previously tracked issues after closure.

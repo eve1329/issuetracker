@@ -53,6 +53,7 @@ export const ISSUE_LEDGER_HEADERS = [
 	'首次相应时长格式',
 ];
 const DEFAULT_INTERNAL_REFERENCE_PREFIXES = ['IR', 'SR'];
+const DEFAULT_INTERNAL_TITLE_MARKERS = ['【fix】', '【门禁测试】', '【release】', '【next】', '【需求】'];
 const CREATED_AT_FORMATTER = new Intl.DateTimeFormat('en-US', {
 	timeZone: 'Asia/Shanghai',
 	year: 'numeric',
@@ -151,7 +152,8 @@ function buildRow(
 ): IssueLedgerRow {
 	const username = normalizeUsername(issue.authorUsername);
 	const directoryName = directory.get(username);
-	const internalReference = findInternalReference(issue.title, settings.internalReferencePrefixes);
+	const internalEvidence = findInternalReference(issue.title, settings.internalReferencePrefixes)
+		?? findInternalTitleMarker(issue.title);
 	const isWhitelisted = whitelist.has(username);
 
 	return {
@@ -165,13 +167,13 @@ function buildRow(
 		createdAt: formatCreatedAt(issue.createdAt),
 		username: issue.authorUsername,
 		name: directoryName || issue.authorName,
-		personnelType: isWhitelisted || Boolean(internalReference) ? '内部' : '外部伙伴',
+		personnelType: isWhitelisted || Boolean(internalEvidence) ? '内部' : '外部伙伴',
 		department: '',
 		firstResponseAt: '',
 		firstResponseDuration: '',
 		evidence: isWhitelisted
 			? '白名单'
-			: internalReference ?? '未命中白名单或内部编号',
+			: internalEvidence ?? '未命中白名单或内部编号',
 	};
 }
 
@@ -234,6 +236,11 @@ function findInternalReference(title: string, configuredPrefixes: string[] | und
 	const prefixPattern = prefixes.map(escapeRegExp).join('|');
 	const pattern = new RegExp(`(?<![A-Za-z0-9])(?:${prefixPattern})[-_ ]?\\d+(?![A-Za-z0-9])`, 'i');
 	return title.match(pattern)?.[0] ?? null;
+}
+
+function findInternalTitleMarker(title: string) {
+	const normalizedTitle = title.toLocaleLowerCase();
+	return DEFAULT_INTERNAL_TITLE_MARKERS.find((marker) => normalizedTitle.includes(marker.toLocaleLowerCase())) ?? null;
 }
 
 function normalizeSerialByIssueKey(serialByIssueKey: Record<string, number> | undefined) {

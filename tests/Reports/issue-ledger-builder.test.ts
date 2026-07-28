@@ -161,6 +161,27 @@ describe('buildIssueLedger', () => {
 		expect(result.rows[0].state).toBe('opened');
 	});
 
+	it('marks configured bracketed workflow titles as internal', () => {
+		const markers = ['【fix】', '【门禁测试】', '【release】', '【next】', '【需求】'];
+		const result = buildIssueLedger(
+			markers.map((marker, index) => makeIssue({
+				iid: index + 1,
+				title: `${marker} 内部工作项`,
+				webUrl: `https://gitcode.com/CPF-KMP-CMP/repo-a/issues/${index + 1}`,
+			})),
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+
+		expect(result.rows.map((row) => ({
+			personnelType: row.personnelType,
+			evidence: row.evidence,
+		}))).toEqual(markers.map((marker) => ({
+			personnelType: '内部',
+			evidence: marker,
+		})));
+	});
+
 	it('does not classify an embedded prefix as internal and escapes CSV fields', () => {
 		const result = buildIssueLedger(
 			[
