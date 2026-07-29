@@ -2,6 +2,10 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.3 - 2026-07-29
+
+- Resolve the ledger author as internal or external before evaluating internal workflow references or title markers. Markers such as `【fix】` are now a fallback only when no author account is available, so they cannot turn a known external author into an internal record.
+
 ## 0.2.2 - 2026-07-28
 
 - Mark ledger Issues as internal when their titles contain one of the configured internal workflow markers: `【fix】`, `【门禁测试】`, `【release】`, `【next】`, or `【需求】`.

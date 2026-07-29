@@ -72,14 +72,14 @@ describe('buildIssueLedger', () => {
 				serial: 1,
 				issueKey: 'CPF-KMP-CMP/repo-a#8',
 				category: '需求',
-				personnelType: '内部',
-				evidence: 'IR001',
+				personnelType: '外部伙伴',
+				evidence: '外部账号',
 			}),
 			expect.objectContaining({
 				serial: 2,
 				issueKey: 'CPF-KMP-CMP/repo-a#9',
 				personnelType: '外部伙伴',
-				evidence: '未命中白名单或内部编号',
+				evidence: '外部账号',
 			}),
 		]);
 		expect(result.serialState).toEqual({
@@ -91,7 +91,7 @@ describe('buildIssueLedger', () => {
 		});
 		expect(result.csv).toContain('序号,问题,链接,响应人/责任人,分类,状态,Issue来源方,code账号,姓名,公司部门,创建时间,首次相应时间,首次相应时长格式');
 		expect(result.csv).not.toContain('白名单人员问题');
-		expect(result.csv).toContain('1,IR001 编号问题,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/8,,需求,open,内部,not-listed,Internal Reporter,,2026/7/27 09:00:00,,');
+		expect(result.csv).toContain('1,IR001 编号问题,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/8,,需求,open,外部伙伴,not-listed,Internal Reporter,,2026/7/27 09:00:00,,');
 	});
 
 	it('starts tracking from the configured month and resets serials when the month changes', () => {
@@ -161,12 +161,14 @@ describe('buildIssueLedger', () => {
 		expect(result.rows[0].state).toBe('opened');
 	});
 
-	it('marks configured bracketed workflow titles as internal', () => {
+	it('uses workflow markers only when the author identity is unavailable', () => {
 		const markers = ['【fix】', '【门禁测试】', '【release】', '【next】', '【需求】'];
 		const result = buildIssueLedger(
 			markers.map((marker, index) => makeIssue({
 				iid: index + 1,
 				title: `${marker} 内部工作项`,
+				authorUsername: '',
+				authorName: '',
 				webUrl: `https://gitcode.com/CPF-KMP-CMP/repo-a/issues/${index + 1}`,
 			})),
 			{internalMemberDirectory: {}, internalUserWhitelist: []},
@@ -180,6 +182,37 @@ describe('buildIssueLedger', () => {
 			personnelType: '内部',
 			evidence: marker,
 		})));
+	});
+
+	it('keeps an external author external even when the title contains an internal workflow marker', () => {
+		const result = buildIssueLedger(
+			[makeIssue({title: '【fix】 外部伙伴提交的问题', authorUsername: 'external_partner'})],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+
+		expect(result.rows[0]).toEqual(expect.objectContaining({
+			personnelType: '外部伙伴',
+			evidence: '外部账号',
+		}));
+	});
+
+	it('keeps a confirmed internal author internal before evaluating title markers', () => {
+		const result = buildIssueLedger(
+			[makeIssue({
+				title: '【fix】 内部工作项',
+				authorUsername: 'member_a',
+				isInternalAuthor: true,
+				internalMatchedBy: 'repo',
+			})],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+
+		expect(result.rows[0]).toEqual(expect.objectContaining({
+			personnelType: '内部',
+			evidence: '协作者目录:repo',
+		}));
 	});
 
 	it('does not classify an embedded prefix as internal and escapes CSV fields', () => {
@@ -197,7 +230,7 @@ describe('buildIssueLedger', () => {
 
 		expect(result.rows[0]).toEqual(expect.objectContaining({
 			personnelType: '外部伙伴',
-			evidence: '未命中白名单或内部编号',
+			evidence: '外部账号',
 		}));
 		expect(result.csv).toContain('1,"BIR123 is not an internal reference, ""quoted"""');
 	});

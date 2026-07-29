@@ -152,9 +152,15 @@ function buildRow(
 ): IssueLedgerRow {
 	const username = normalizeUsername(issue.authorUsername);
 	const directoryName = directory.get(username);
+	const isWhitelisted = whitelist.has(username);
+	const identity = resolvePersonnelType(issue, username, directoryName, isWhitelisted);
 	const internalEvidence = findInternalReference(issue.title, settings.internalReferencePrefixes)
 		?? findInternalTitleMarker(issue.title);
-	const isWhitelisted = whitelist.has(username);
+	const personnelType = identity?.personnelType
+		?? (internalEvidence ? '内部' : '外部伙伴');
+	const evidence = identity?.evidence
+		?? internalEvidence
+		?? '未提供账号，未命中内部编号或工作标记';
 
 	return {
 		serial,
@@ -167,14 +173,38 @@ function buildRow(
 		createdAt: formatCreatedAt(issue.createdAt),
 		username: issue.authorUsername,
 		name: directoryName || issue.authorName,
-		personnelType: isWhitelisted || Boolean(internalEvidence) ? '内部' : '外部伙伴',
+		personnelType,
 		department: '',
 		firstResponseAt: '',
 		firstResponseDuration: '',
-		evidence: isWhitelisted
-			? '白名单'
-			: internalEvidence ?? '未命中白名单或内部编号',
+		evidence,
 	};
+}
+
+function resolvePersonnelType(
+	issue: Pick<NormalizedIssueNote, 'isInternalAuthor' | 'internalMatchedBy'>,
+	username: string,
+	directoryName: string | undefined,
+	isWhitelisted: boolean,
+): {personnelType: IssueLedgerRow['personnelType']; evidence: string} | null {
+	if (directoryName !== undefined) {
+		return {personnelType: '内部', evidence: '成员目录'};
+	}
+
+	if (isWhitelisted) {
+		return {personnelType: '内部', evidence: '白名单'};
+	}
+
+	if (issue.isInternalAuthor) {
+		return {personnelType: '内部', evidence: `协作者目录:${issue.internalMatchedBy}`};
+	}
+
+	// A supplied account has an identity classification. Title markers cannot overwrite it.
+	if (username) {
+		return {personnelType: '外部伙伴', evidence: '外部账号'};
+	}
+
+	return null;
 }
 
 function formatCreatedAt(createdAt: string) {
