@@ -4,8 +4,88 @@ import issueTrackerIcon from './assets/issue-tracker-icon.svg';
 import {GitlabIssuesSettingTab} from "./SettingsTab/settings-tab";
 import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
-import SyncService from "./Sync/sync-service";
+import SyncService, {SyncProgress} from "./Sync/sync-service";
 import {logger} from "./utils/utils";
+
+class SyncProgressNotice {
+	private static readonly FINAL_MESSAGE_DURATION_MS = 5000;
+	private readonly notice: Notice;
+	private hideTimeout: number | null = null;
+
+	constructor() {
+		this.notice = new Notice(this.buildMessage({
+			phase: 'starting',
+			percent: 0,
+			message: '开始同步 Issue',
+		}), 0);
+	}
+
+	update(progress: SyncProgress) {
+		this.clearHideTimeout();
+		this.notice.setMessage(this.buildMessage(progress));
+	}
+
+	finish() {
+		this.scheduleHide();
+	}
+
+	fail(message: string) {
+		this.update({
+			phase: 'complete',
+			percent: 100,
+			message: `同步失败：${message}`,
+		});
+		this.scheduleHide();
+	}
+
+	private buildMessage(progress: SyncProgress) {
+		const fragment = document.createDocumentFragment();
+		const container = document.createElement('div');
+		const statusRow = document.createElement('div');
+		const status = document.createElement('span');
+		const percent = document.createElement('strong');
+		const progressBar = document.createElement('progress');
+
+		container.style.display = 'grid';
+		container.style.gap = '8px';
+		container.style.width = '280px';
+		container.style.maxWidth = '100%';
+		statusRow.style.display = 'flex';
+		statusRow.style.alignItems = 'center';
+		statusRow.style.gap = '12px';
+		status.style.flex = '1';
+		status.style.minWidth = '0';
+		status.style.overflowWrap = 'anywhere';
+		status.textContent = progress.message;
+		percent.style.flexShrink = '0';
+		percent.textContent = `${progress.percent}%`;
+		progressBar.max = 100;
+		progressBar.value = progress.percent;
+		progressBar.style.width = '100%';
+		progressBar.style.height = '8px';
+		progressBar.setAttribute('aria-label', 'IssueTracker 同步进度');
+
+		statusRow.append(status, percent);
+		container.append(statusRow, progressBar);
+		fragment.append(container);
+		return fragment;
+	}
+
+	private scheduleHide() {
+		this.clearHideTimeout();
+		this.hideTimeout = window.setTimeout(() => {
+			this.notice.hide();
+			this.hideTimeout = null;
+		}, SyncProgressNotice.FINAL_MESSAGE_DURATION_MS);
+	}
+
+	private clearHideTimeout() {
+		if (this.hideTimeout !== null) {
+			window.clearTimeout(this.hideTimeout);
+			this.hideTimeout = null;
+		}
+	}
+}
 
 export default class GitlabIssuesPlugin extends Plugin {
 	settings: GitlabIssuesSettings;
@@ -102,8 +182,13 @@ export default class GitlabIssuesPlugin extends Plugin {
 	}
 
 	private fetchFromGitlab() {
-		new Notice('Updating issues from supported hosts');
-		void new SyncService(this.app, this.settings).run()
-			.catch((error) => logger(error instanceof Error ? error.message : String(error)));
+		const progressNotice = new SyncProgressNotice();
+		void new SyncService(this.app, this.settings, (progress) => progressNotice.update(progress)).run()
+			.then(() => progressNotice.finish())
+			.catch((error) => {
+				const message = error instanceof Error ? error.message : String(error);
+				logger(message);
+				progressNotice.fail(message);
+			});
 	}
 }

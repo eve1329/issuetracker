@@ -2,6 +2,11 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.4 - 2026-07-29
+
+- Show a persistent in-Obsidian progress bar while IssueTracker synchronizes repositories, files, reports, and CSV/XLSX ledger outputs, with visible success, degraded, and failure completion states.
+- Leave the ledger name blank for unmapped external accounts instead of copying an unverified API display name. Confirmed internal members continue to use the configured directory or API name.
+
 ## 0.2.3 - 2026-07-29
 
 - Resolve the ledger author as internal or external before evaluating internal workflow references or title markers. Markers such as `【fix】` are now a fallback only when no author account is available, so they cannot turn a known external author into an internal record.

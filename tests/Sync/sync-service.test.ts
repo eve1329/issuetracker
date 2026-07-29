@@ -224,6 +224,7 @@ describe('SyncService', () => {
 		mockWriteJson.mockReset();
 		mockWriteIssueNotes.mockReset();
 		mockUpsertTextFile.mockReset();
+		mockWriteBinary.mockReset();
 		mockReadJson.mockReset();
 		mockReadIssueNotes.mockReset();
 		mockPurgeIssueNotes.mockReset();
@@ -235,6 +236,7 @@ describe('SyncService', () => {
 		mockWriteJson.mockResolvedValue(undefined);
 		mockWriteIssueNotes.mockResolvedValue([]);
 		mockUpsertTextFile.mockResolvedValue(undefined);
+		mockWriteBinary.mockResolvedValue(undefined);
 		mockReadJson.mockResolvedValue(null);
 		mockReadIssueNotes.mockResolvedValue([]);
 		mockPurgeIssueNotes.mockResolvedValue(undefined);
@@ -308,6 +310,49 @@ describe('SyncService', () => {
 				memberSyncProgress: undefined,
 			}),
 		);
+	});
+
+	it('reports Excel ledger refresh progress and a successful completion', async () => {
+		const settings = makeSettings({repoList: ['repo-a'], generateDailyReports: false});
+		const onProgress = jest.fn();
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+
+		const result = await new SyncService(mockApp, settings, onProgress).run();
+
+		expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+			phase: 'ledger',
+			percent: 94,
+			message: '正在写入 Excel 台账',
+		}));
+		expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+			phase: 'ledger',
+			percent: 96,
+			message: 'Excel 台账已刷新',
+		}));
+		expect(onProgress).toHaveBeenLastCalledWith({
+			phase: 'complete',
+			percent: 100,
+			message: '同步完成，Excel 台账已刷新',
+		});
+		expect(result).toEqual({syncStatus: 'success', ledgerWriteFailed: false});
+	});
+
+	it('reports a visible Excel ledger failure after the write fails', async () => {
+		const settings = makeSettings({repoList: ['repo-a'], generateDailyReports: false});
+		const onProgress = jest.fn();
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockWriteBinary.mockRejectedValueOnce(new Error('XLSX write failed'));
+
+		const result = await new SyncService(mockApp, settings, onProgress).run();
+
+		expect(onProgress).toHaveBeenLastCalledWith({
+			phase: 'complete',
+			percent: 100,
+			message: '同步完成，但 Excel 台账刷新失败',
+		});
+		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: true});
 	});
 
 	it('keeps syncing remaining repos and marks outputs degraded when one repo fails', async () => {
@@ -1410,11 +1455,12 @@ describe('SyncService', () => {
 
 	it('marks sync degraded when the issue ledger CSV cannot be persisted', async () => {
 		const settings = makeSettings({generateDailyReports: false});
+		const onProgress = jest.fn();
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
 		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
 		mockUpsertTextFile.mockRejectedValueOnce(new Error('CSV store unavailable'));
 
-		await new SyncService(mockApp, settings).run();
+		await new SyncService(mockApp, settings, onProgress).run();
 
 		expect(mockWriteJson).toHaveBeenNthCalledWith(
 			2,
@@ -1432,8 +1478,13 @@ describe('SyncService', () => {
 				warningMessages: expect.arrayContaining([
 					expect.stringContaining('Failed to write issue ledger: CSV store unavailable'),
 				]),
-			}),
-		);
+				}),
+			);
+		expect(onProgress).toHaveBeenLastCalledWith({
+			phase: 'complete',
+			percent: 100,
+			message: '同步完成，但 CSV 台账刷新失败',
+		});
 	});
 
 	it('normalizes GitHub-style issues that use html_url login and object labels', async () => {

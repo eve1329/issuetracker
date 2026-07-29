@@ -172,7 +172,7 @@ function buildRow(
 		state: issue.state,
 		createdAt: formatCreatedAt(issue.createdAt),
 		username: issue.authorUsername,
-		name: directoryName || issue.authorName,
+		name: identity?.personnelType === '内部' ? (directoryName || issue.authorName).trim() : '',
 		personnelType,
 		department: '',
 		firstResponseAt: '',

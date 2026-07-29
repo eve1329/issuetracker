@@ -91,7 +91,7 @@ describe('buildIssueLedger', () => {
 		});
 		expect(result.csv).toContain('序号,问题,链接,响应人/责任人,分类,状态,Issue来源方,code账号,姓名,公司部门,创建时间,首次相应时间,首次相应时长格式');
 		expect(result.csv).not.toContain('白名单人员问题');
-		expect(result.csv).toContain('1,IR001 编号问题,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/8,,需求,open,外部伙伴,not-listed,Internal Reporter,,2026/7/27 09:00:00,,');
+		expect(result.csv).toContain('1,IR001 编号问题,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/8,,需求,open,外部伙伴,not-listed,,,2026/7/27 09:00:00,,');
 	});
 
 	it('starts tracking from the configured month and resets serials when the month changes', () => {
@@ -197,6 +197,23 @@ describe('buildIssueLedger', () => {
 		}));
 	});
 
+	it('leaves the name blank for an external account that is absent from the member directory', () => {
+		const result = buildIssueLedger(
+			[makeIssue({authorUsername: 'cylde', authorName: '哎呀'})],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+
+		expect(result.rows[0]).toEqual(expect.objectContaining({
+			username: 'cylde',
+			name: '',
+			personnelType: '外部伙伴',
+			evidence: '外部账号',
+		}));
+		expect(result.csv).toContain('外部伙伴,cylde,,,');
+		expect(result.csv).not.toContain('哎呀');
+	});
+
 	it('keeps a confirmed internal author internal before evaluating title markers', () => {
 		const result = buildIssueLedger(
 			[makeIssue({
@@ -210,6 +227,7 @@ describe('buildIssueLedger', () => {
 		);
 
 		expect(result.rows[0]).toEqual(expect.objectContaining({
+			name: 'Partner A',
 			personnelType: '内部',
 			evidence: '协作者目录:repo',
 		}));

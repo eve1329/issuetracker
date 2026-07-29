@@ -14,6 +14,28 @@ import {buildIssueLedgerXlsx} from "../Reports/issue-ledger-xlsx-builder";
 import {buildIssueClosureNotice, IssueClosureState} from "../Reports/issue-closure-notice-builder";
 import {logger} from "../utils/utils";
 
+export type SyncProgressPhase = 'starting' | 'members' | 'issues' | 'issue-files' | 'reports' | 'ledger' | 'closing' | 'complete';
+
+export interface SyncProgress {
+	phase: SyncProgressPhase;
+	percent: number;
+	message: string;
+}
+
+export interface SyncRunResult {
+	syncStatus: 'success' | 'degraded';
+	ledgerWriteFailed: boolean;
+}
+
+type LedgerWriteStage = 'prepare' | 'state' | 'csv' | 'xlsx';
+
+const LEDGER_FAILURE_PROGRESS: Record<LedgerWriteStage, Pick<SyncProgress, 'percent' | 'message'>> = {
+	prepare: {percent: 82, message: '台账准备失败'},
+	state: {percent: 82, message: '台账状态保存失败'},
+	csv: {percent: 88, message: 'CSV 台账刷新失败'},
+	xlsx: {percent: 96, message: 'Excel 台账刷新失败'},
+};
+
 interface SyncState {
 	syncStatus: 'success' | 'degraded';
 	failedRepos: string[];
@@ -31,13 +53,18 @@ export default class SyncService {
 	private readonly loader: GitlabLoader;
 	private readonly memberLoader: MemberLoader;
 
-	constructor(app: App, private readonly settings: GitlabIssuesSettings) {
+	constructor(
+		app: App,
+		private readonly settings: GitlabIssuesSettings,
+		private readonly onProgress?: (progress: SyncProgress) => void,
+	) {
 		this.fs = new Filesystem(app.vault, settings);
 		this.loader = new GitlabLoader(app, settings);
 		this.memberLoader = new MemberLoader(settings);
 	}
 
-	async run() {
+	async run(): Promise<SyncRunResult> {
+		this.reportProgress('starting', 0, '开始同步 Issue');
 		const reportDate = new Date().toISOString().slice(0, 10);
 		const syncTime = new Date().toISOString();
 		const dailyReportsFolder = `${this.settings.reportsFolder}/daily`;
@@ -45,6 +72,7 @@ export default class SyncService {
 		const previousSyncState = await this.fs.readJson<SyncState>(`${this.settings.metaFolder}/sync-state.json`);
 		const warningMessages: string[] = [];
 		const repoNames = await this.loader.resolveRepoNames();
+		this.reportProgress('members', 5, `已发现 ${repoNames.length} 个仓库，正在同步内部成员`);
 
 		await this.fs.ensureFolders([
 			this.settings.outputDir,
@@ -82,6 +110,7 @@ export default class SyncService {
 			logger(message);
 			internalMembers = previousInternalMembers ?? {usernames: {}};
 		}
+		this.reportProgress('issues', 12, '正在获取仓库 Issue');
 
 		const normalizedNotes: NormalizedIssueNote[] = [];
 		const repoIssueBatches: Array<{repoName: string; issues: Issue[]}> = [];
@@ -90,7 +119,9 @@ export default class SyncService {
 		let issueStorageFailed = false;
 		let hasUnknownClassifications = false;
 
-		for (const repoName of repoNames) {
+		for (const [repoIndex, repoName] of repoNames.entries()) {
+			const percent = 12 + Math.round((repoIndex / Math.max(repoNames.length, 1)) * 43);
+			this.reportProgress('issues', percent, `正在同步 Issue（${repoIndex + 1}/${repoNames.length}）：${repoName}`);
 			try {
 				const repoIssues = await this.loader.loadRepoIssues(repoName);
 				repoIssueBatches.push({repoName, issues: repoIssues});
@@ -106,6 +137,7 @@ export default class SyncService {
 				warningMessages.push(`Failed to sync ${repoName}: ${this.getErrorMessage(error)}`);
 			}
 		}
+		this.reportProgress('issue-files', 55, '正在写入 Issue 文件');
 
 		let existingNotesByKey = new Map<string, NormalizedIssueNote>();
 		if (hasUnknownClassifications) {
@@ -150,6 +182,7 @@ export default class SyncService {
 		let persistedNotes: NormalizedIssueNote[] | null = null;
 
 		if (this.settings.generateDailyReports) {
+			this.reportProgress('reports', 68, '正在更新日报和摘要');
 			try {
 				persistedNotes = await this.fs.readIssueNotes();
 				const provisionalStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded' || repositorySyncStatus === 'degraded'
@@ -189,6 +222,9 @@ export default class SyncService {
 		}
 
 		let ledgerWriteFailed = false;
+		let ledgerWriteStage: LedgerWriteStage = 'prepare';
+		let ledgerFailureMessage = '台账刷新失败';
+		this.reportProgress('ledger', 82, '正在准备 CSV / Excel 台账');
 		try {
 			persistedNotes ??= await this.fs.readIssueNotes();
 			const previousSerialState = await this.fs.readJson<IssueLedgerSerialState>(
@@ -201,14 +237,23 @@ export default class SyncService {
 			}, previousSerialState);
 
 			// Persist allocation first so a CSV write retry cannot assign a different serial.
+			ledgerWriteStage = 'state';
 			await this.fs.writeJson(`${this.settings.metaFolder}/issue-ledger-state.json`, ledger.serialState);
+			ledgerWriteStage = 'csv';
+			this.reportProgress('ledger', 88, '正在写入 CSV 台账');
 			await this.fs.upsertTextFile(`${this.settings.reportsFolder}/issue-ledger.csv`, ledger.csv);
+			ledgerWriteStage = 'xlsx';
+			this.reportProgress('ledger', 94, '正在写入 Excel 台账');
 			await this.fs.writeBinary(`${this.settings.reportsFolder}/issue-ledger.xlsx`, buildIssueLedgerXlsx(ledger.rows));
+			this.reportProgress('ledger', 96, 'Excel 台账已刷新');
 		} catch (error) {
 			ledgerWriteFailed = true;
 			const message = `Failed to write issue ledger: ${this.getErrorMessage(error)}`;
 			warningMessages.push(message);
 			logger(message);
+			const failureProgress = LEDGER_FAILURE_PROGRESS[ledgerWriteStage];
+			ledgerFailureMessage = failureProgress.message;
+			this.reportProgress('ledger', failureProgress.percent, failureProgress.message);
 		}
 
 		if (ledgerWriteFailed) {
@@ -216,6 +261,7 @@ export default class SyncService {
 		}
 
 		let closureNoticeWriteFailed = false;
+		this.reportProgress('closing', 98, '正在更新 Issue 关闭提醒');
 		try {
 			persistedNotes ??= await this.fs.readIssueNotes();
 			const previousClosureState = await this.fs.readJson<IssueClosureState>(
@@ -259,6 +305,30 @@ export default class SyncService {
 			warningMessages,
 			memberSyncProgress: internalMembers.syncProgress,
 		} as SyncState);
+
+		this.reportProgress(
+			'complete',
+			100,
+			ledgerWriteFailed
+				? `同步完成，但 ${ledgerFailureMessage}`
+				: syncStatus === 'success'
+					? '同步完成，Excel 台账已刷新'
+					: '同步完成，但部分任务有异常',
+		);
+
+		return {syncStatus, ledgerWriteFailed};
+	}
+
+	private reportProgress(phase: SyncProgressPhase, percent: number, message: string) {
+		try {
+			this.onProgress?.({
+				phase,
+				percent: Math.max(0, Math.min(100, Math.round(percent))),
+				message,
+			});
+		} catch (error) {
+			logger(`Could not report sync progress: ${this.getErrorMessage(error)}`);
+		}
 	}
 
 	private normalizeIssue(
