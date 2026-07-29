@@ -11,8 +11,9 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 
 - 从指定的仓库同步 issue，或者同步某个组织 / group 下的全部仓库。
 - 将每条 issue 规范化后保存到配置的 issues 目录。
-- 结合仓库协作者信息和手工白名单，把作者标记为内部或外部成员。
-- 先按作者账号判定内部或外部；只有未提供账号时，才用默认内部工作标记 `【fix】`、`【门禁测试】`、`【release】`、`【next】` 或 `【需求】` 作为台账内部判定的兜底。
+- 结合内部成员目录、仓库协作者信息和手工白名单，把作者标记为内部或外部成员。
+- 当标题命中 `IR` / `SR` 内部编号，或默认内部工作标记 `【fix】`、`【bug】`、`【门禁测试】`、`门禁测试`、`【release】`、`【next】`、`【需求】` 时，即使作者账号尚未进入成员目录，也按内部人员处理。
+- 自动生成“内部人员名单收集待补全报告”，单独列出命中内部标题证据但不在已确认成员目录中的账号、原因和关联 Issue。
 - 通过可配置的前缀、关键词和标签规则，把 issue 分类为 `bug`、`requirement` 或 `unknown`。
 - 生成便于机器处理的日报，以及适合 AI 消费的日报摘要。
 - 生成 13 列 issue 台账：CSV 保留原始 URL，XLSX 使用原生超链接，导入腾讯文档后可直接点击。
@@ -28,6 +29,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `GitCode Issues/meta/sync-state.json`
 - `GitCode Issues/reports/issue-ledger.csv`
 - `GitCode Issues/reports/issue-ledger.xlsx`
+- `GitCode Issues/reports/internal-member-identity-review.md`
 - `GitCode Issues/reports/issue-close-reminders.md`
 - `GitCode Issues/reports/daily/YYYY-MM-DD.md`
 - `GitCode Issues/reports/daily-brief/YYYY-MM-DD-brief.md`
@@ -59,7 +61,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `Repository List`：当你不想同步整个组织或 group 时，每行填写一个仓库
 - `Sync all organization repositories`：自动发现并同步该组织或 group 下的所有仓库
 - `Internal User Whitelist`：当协作者同步不完整时，仍要视为内部成员的用户名白名单
-- `Internal Member Directory`：可选的账号到姓名 JSON 映射，用于 issue 台账；目录中的账号会视为内部人员
+- `Internal Member Directory`：账号到姓名的权威 JSON 映射，用于台账、日报和名单待补全报告；目录中的账号均视为已确认内部人员
 - `Issue Ledger Start Month`：可选 `YYYY-MM` 截止月份，只会将该月及之后创建的 issue 写入台账；修改该值会重建台账序号
 - `Classification Rules`：把标题或标签映射到 `bug` / `requirement` 的 JSON 规则
 - `Issues Folder`、`Meta Folder`、`Reports Folder`：vault 内的输出目录

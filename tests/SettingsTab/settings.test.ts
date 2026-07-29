@@ -328,7 +328,7 @@ describe('settings', () => {
 			},
 			{
 				title: 'Internal Member Directory',
-				description: 'Manual GitCode account-to-name mapping for the issue ledger. Listed accounts are internal.',
+				description: 'Authoritative GitCode account-to-name mapping for ledgers, reports, and roster-gap review. Listed accounts are confirmed internal.',
 				placeholder: '{\n  "alice": "Alice"\n}',
 				value: 'internalMemberDirectory',
 				modifier: 'json',
@@ -383,7 +383,7 @@ describe('settings', () => {
 	it('exposes the internal member directory in Chinese settings', () => {
 		expect(getSettingsUi('zh-CN').settingInputs).toContainEqual({
 			title: '内部成员目录',
-			description: '用于 issue 台账的 GitCode 账号到姓名人工映射，目录中的账号会视为内部人员。',
+			description: '用于台账、日报和名单待补全报告的权威 GitCode 账号到姓名映射，目录中的账号均视为已确认内部人员。',
 			placeholder: '{\n  "alice": "Alice"\n}',
 			value: 'internalMemberDirectory',
 			modifier: 'json',

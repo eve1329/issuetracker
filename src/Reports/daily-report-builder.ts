@@ -1,4 +1,11 @@
 import {NormalizedIssueNote} from "../Issues/issue-note";
+import {
+	buildKnownInternalUsernameSet,
+	InternalIdentitySettings,
+	isIssueInternal,
+} from '../Classification/internal-identity';
+
+export type DailyReportSettings = InternalIdentitySettings;
 
 export interface DailyReport {
 	date: string;
@@ -39,14 +46,19 @@ function renderIssueSection(title: string, issues: NormalizedIssueNote[]): strin
 	];
 }
 
-export function buildDailyReport(date: string, issues: NormalizedIssueNote[]): DailyReport {
+export function buildDailyReport(
+	date: string,
+	issues: NormalizedIssueNote[],
+	settings: DailyReportSettings = {},
+): DailyReport {
 	const sameDayIssues = issues.filter((issue) => issue.createdAt.startsWith(date));
+	const knownInternalUsernames = buildKnownInternalUsernameSet(settings);
 	const bugIssues = sameDayIssues.filter((issue) => issue.requestKind === 'bug');
 	const requirementIssues = sameDayIssues.filter((issue) => issue.requestKind === 'requirement');
 	const unknownIssues = sameDayIssues.filter((issue) => issue.requestKind === 'unknown');
-	const externalBugIssues = bugIssues.filter((issue) => !issue.isInternalAuthor);
-	const externalRequirementIssues = requirementIssues.filter((issue) => !issue.isInternalAuthor);
-	const externalIssues = sameDayIssues.filter((issue) => !issue.isInternalAuthor);
+	const externalBugIssues = bugIssues.filter((issue) => !isIssueInternal(issue, knownInternalUsernames, settings.internalReferencePrefixes));
+	const externalRequirementIssues = requirementIssues.filter((issue) => !isIssueInternal(issue, knownInternalUsernames, settings.internalReferencePrefixes));
+	const externalIssues = sameDayIssues.filter((issue) => !isIssueInternal(issue, knownInternalUsernames, settings.internalReferencePrefixes));
 	const externalAuthorCounts = externalIssues.reduce<Record<string, number>>((counts, issue) => {
 		counts[issue.authorUsername] = (counts[issue.authorUsername] || 0) + 1;
 		return counts;

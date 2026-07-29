@@ -162,6 +162,38 @@ describe('buildDailyReport', () => {
 		});
 	});
 
+	it('excludes confirmed-directory and internal-workflow authors from external counts', () => {
+		const report = buildDailyReport('2026-06-17', [
+			makeIssue({
+				iid: 1,
+				title: '普通内部问题',
+				authorUsername: 'KNOWN_MEMBER',
+				requestKind: 'bug',
+			}),
+			makeIssue({
+				iid: 2,
+				title: '【bug】 名单待补充人员的问题',
+				authorUsername: 'missing_member',
+				requestKind: 'bug',
+			}),
+			makeIssue({
+				iid: 3,
+				title: '普通外部问题',
+				authorUsername: 'external_partner',
+				requestKind: 'requirement',
+			}),
+		], {
+			internalMemberDirectory: {known_member: '已确认成员'},
+			internalUserWhitelist: [],
+		});
+
+		expect(report.externalBugCount).toBe(0);
+		expect(report.externalRequirementCount).toBe(1);
+		expect(report.externalIssueCount).toBe(1);
+		expect(report.topExternalAuthors).toEqual(['external_partner']);
+		expect(report.externalAuthorIssueCounts).toEqual({external_partner: 1});
+	});
+
 	it('renders a structured daily markdown report with frontmatter and grouped sections', () => {
 		const report = buildDailyReport('2026-06-17', [
 			makeIssue({

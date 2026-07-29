@@ -1,4 +1,10 @@
 import {NormalizedIssueNote} from '../Issues/issue-note';
+import {
+	buildIssueKey,
+	deduplicateIssues,
+	isOnOrAfterStartMonth,
+	normalizeStartMonth,
+} from '../Issues/issue-scope';
 
 export interface IssueClosureState {
 	closedIssueKeys: string[];
@@ -85,42 +91,13 @@ export function buildIssueClosureNoticeMarkdown(
 	].filter((line, index, lines) => line.length > 0 || lines[index - 1]?.length !== 0).join('\n');
 }
 
-function normalizeStartMonth(startMonth: string | undefined) {
-	const normalized = startMonth?.trim() ?? '';
-	return /^\d{4}-(0[1-9]|1[0-2])$/.test(normalized) ? normalized : '';
-}
-
 function normalizeClosedIssueKeys(issueKeys: string[] | undefined) {
 	return [...new Set((issueKeys ?? []).filter((issueKey) => typeof issueKey === 'string' && issueKey.trim().length > 0))]
 		.sort((left, right) => left.localeCompare(right));
 }
 
-function isOnOrAfterStartMonth(issue: Pick<NormalizedIssueNote, 'createdAt'>, startMonth: string) {
-	if (!startMonth) {
-		return true;
-	}
-
-	const createdAt = new Date(issue.createdAt).getTime();
-	const startAt = new Date(`${startMonth}-01T00:00:00+08:00`).getTime();
-	return Number.isFinite(createdAt) && createdAt >= startAt;
-}
-
 function isClosedIssue(issue: Pick<NormalizedIssueNote, 'state'>) {
 	return issue.state.trim().toLowerCase() === 'closed';
-}
-
-function deduplicateIssues(issues: NormalizedIssueNote[]) {
-	const byKey = new Map<string, NormalizedIssueNote>();
-
-	for (const issue of issues) {
-		const key = buildIssueKey(issue);
-		const existingIssue = byKey.get(key);
-		if (!existingIssue || issue.updatedAt > existingIssue.updatedAt) {
-			byKey.set(key, issue);
-		}
-	}
-
-	return [...byKey.values()];
 }
 
 function toClosedIssueReminder(issue: NormalizedIssueNote): ClosedIssueReminder {
@@ -133,11 +110,6 @@ function toClosedIssueReminder(issue: NormalizedIssueNote): ClosedIssueReminder 
 		requestKind: issue.requestKind,
 		updatedAt: issue.updatedAt,
 	};
-}
-
-function buildIssueKey(issue: Pick<NormalizedIssueNote, 'projectPath' | 'sourceRepo' | 'iid'>) {
-	const projectPath = issue.projectPath.trim() || issue.sourceRepo.trim();
-	return `${projectPath}#${issue.iid}`;
 }
 
 function compareReminders(left: ClosedIssueReminder, right: ClosedIssueReminder) {

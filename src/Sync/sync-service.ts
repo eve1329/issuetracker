@@ -12,6 +12,7 @@ import {buildAiBriefMarkdown} from "../Reports/ai-brief-builder";
 import {buildIssueLedger, IssueLedgerSerialState} from "../Reports/issue-ledger-builder";
 import {buildIssueLedgerXlsx} from "../Reports/issue-ledger-xlsx-builder";
 import {buildIssueClosureNotice, IssueClosureState} from "../Reports/issue-closure-notice-builder";
+import {buildInternalMemberIdentityReview} from "../Reports/internal-member-identity-review-builder";
 import {logger} from "../utils/utils";
 
 export type SyncProgressPhase = 'starting' | 'members' | 'issues' | 'issue-files' | 'reports' | 'ledger' | 'closing' | 'complete';
@@ -197,7 +198,10 @@ export default class SyncService {
 				);
 
 				for (const date of reportDates) {
-					const report = buildDailyReport(date, persistedNotes);
+					const report = buildDailyReport(date, persistedNotes, {
+						internalMemberDirectory: this.settings.internalMemberDirectory,
+						internalUserWhitelist: this.settings.internalUserWhitelist,
+					});
 					report.syncStatus = provisionalStatus;
 
 					await this.fs.upsertTextFile(
@@ -257,6 +261,28 @@ export default class SyncService {
 		}
 
 		if (ledgerWriteFailed) {
+			repositorySyncStatus = 'degraded';
+		}
+
+		let identityReviewWriteFailed = false;
+		try {
+			persistedNotes ??= await this.fs.readIssueNotes();
+			const identityReview = buildInternalMemberIdentityReview(persistedNotes, {
+				internalMemberDirectory: this.settings.internalMemberDirectory,
+				startMonth: this.settings.issueLedgerStartMonth,
+			});
+			await this.fs.upsertTextFile(
+				`${this.settings.reportsFolder}/internal-member-identity-review.md`,
+				identityReview.markdown,
+			);
+		} catch (error) {
+			identityReviewWriteFailed = true;
+			const message = `Failed to write internal member identity review: ${this.getErrorMessage(error)}`;
+			warningMessages.push(message);
+			logger(message);
+		}
+
+		if (identityReviewWriteFailed) {
 			repositorySyncStatus = 'degraded';
 		}
 

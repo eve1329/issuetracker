@@ -721,7 +721,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(10);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			1,
 			'GitCode Issues/reports/daily/2026-06-19.md',
@@ -853,7 +853,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
 			expect.stringContaining('# Issue Daily Brief - 2026-06-22'),
 		);
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(10);
 		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
@@ -1370,8 +1370,7 @@ describe('SyncService', () => {
 		previousSerialState = initialSerialState;
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
-			2,
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
 			'GitCode Issues/reports/issue-ledger.csv',
 			expect.stringContaining('1,[BUG] 登录失败,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/78,,缺陷,closed,内部,Dev_A,开发甲,,2026/6/17 09:12:00,,'),
 		);
@@ -1379,6 +1378,71 @@ describe('SyncService', () => {
 			5,
 			'GitCode Issues/meta/issue-ledger-state.json',
 			initialSerialState,
+		);
+	});
+
+	it('writes a separate roster-gap report for title-evidence authors outside the confirmed directory', async () => {
+		const settings = makeSettings({
+			generateDailyReports: false,
+			internalMemberDirectory: {known_member: '已确认成员'},
+			issueLedgerStartMonth: '2026-05',
+		});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockReadIssueNotes.mockResolvedValueOnce([
+			makePersistedIssueNote({
+				title: '【bug】 登录失败',
+				authorUsername: 'missing_a',
+				authorName: '开发甲',
+				isInternalAuthor: false,
+				internalMatchedBy: 'none',
+			}),
+		]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
+			'GitCode Issues/reports/issue-ledger.csv',
+			expect.stringContaining('内部,missing_a,开发甲'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
+			'GitCode Issues/reports/internal-member-identity-review.md',
+			expect.stringContaining('为什么可能是内部人员：标题命中内部工作标记 `【bug】`'),
+		);
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
+			'GitCode Issues/reports/internal-member-identity-review.md',
+			expect.stringContaining('`missing_a`'),
+		);
+	});
+
+	it('degrades sync but preserves ledger outputs when the roster-gap report write fails', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockUpsertTextFile.mockImplementation(async (path: string) => {
+			if (path === 'GitCode Issues/reports/internal-member-identity-review.md') {
+				throw new Error('review store unavailable');
+			}
+		});
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
+			'GitCode Issues/reports/issue-ledger.csv',
+			expect.any(String),
+		);
+		expect(mockWriteBinary).toHaveBeenCalledWith(
+			'GitCode Issues/reports/issue-ledger.xlsx',
+			expect.any(Uint8Array),
+		);
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				syncStatus: 'degraded',
+				repositorySyncStatus: 'degraded',
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to write internal member identity review: review store unavailable'),
+				]),
+			}),
 		);
 	});
 
@@ -1407,7 +1471,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(1);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(2);
 
 		previousLedgerState = {
 			nextSerial: 2,
@@ -1416,8 +1480,7 @@ describe('SyncService', () => {
 		};
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
-			3,
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
 			'GitCode Issues/reports/issue-close-reminders.md',
 			expect.stringContaining('首次建立提醒基线'),
 		);
@@ -1440,7 +1503,14 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).not.toHaveBeenCalled();
+		expect(mockUpsertTextFile).not.toHaveBeenCalledWith(
+			'GitCode Issues/reports/issue-ledger.csv',
+			expect.any(String),
+		);
+		expect(mockUpsertTextFile).toHaveBeenCalledWith(
+			'GitCode Issues/reports/internal-member-identity-review.md',
+			expect.stringContaining('# 内部人员名单收集待补全报告'),
+		);
 		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({

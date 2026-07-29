@@ -2,6 +2,12 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## Unreleased
+
+- Treat `IR` / `SR` references and internal workflow markers, including `【bug】` and plain `门禁测试`, as internal-person evidence even when an author account is present.
+- Apply the confirmed member directory and internal title evidence consistently to ledger, daily-report, and AI-brief external counts.
+- Generate `internal-member-identity-review.md` on every sync, grouping accounts missing from the confirmed directory with the exact reason and related Issues.
+
 ## 0.2.4 - 2026-07-29
 
 - Show a persistent in-Obsidian progress bar while IssueTracker synchronizes repositories, files, reports, and CSV/XLSX ledger outputs, with visible success, degraded, and failure completion states.
