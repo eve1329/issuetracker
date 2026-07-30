@@ -18,6 +18,8 @@ describe('buildIssueNoteMarkdown', () => {
 			authorName: '张三',
 			isInternalAuthor: false,
 			internalMatchedBy: 'none',
+			firstResponseAt: '2026-06-17T09:30:00+08:00',
+			firstResponseCheckedAt: '2026-06-17T10:00:00+08:00',
 			labels: ['P1', 'login'],
 			issueTypeRaw: 'issue',
 			requestKind: 'bug',
@@ -40,6 +42,8 @@ describe('buildIssueNoteMarkdown', () => {
 		expect(markdown).toContain('authorName: "张三"');
 		expect(markdown).toContain('isInternalAuthor: false');
 		expect(markdown).toContain('internalMatchedBy: "none"');
+		expect(markdown).toContain('firstResponseAt: "2026-06-17T09:30:00+08:00"');
+		expect(markdown).toContain('firstResponseCheckedAt: "2026-06-17T10:00:00+08:00"');
 		expect(markdown).toContain('labels:\n  - "P1"\n  - "login"');
 		expect(markdown).toContain('issueTypeRaw: "issue"');
 		expect(markdown).toContain('requestKind: bug');

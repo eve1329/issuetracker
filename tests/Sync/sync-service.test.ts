@@ -14,11 +14,13 @@ const mockWriteJson = jest.fn();
 const mockWriteIssueNotes = jest.fn();
 const mockUpsertTextFile = jest.fn();
 const mockWriteBinary = jest.fn();
+const mockRemoveFileIfExists = jest.fn();
 const mockReadJson = jest.fn();
 const mockReadIssueNotes = jest.fn();
 const mockPurgeIssueNotes = jest.fn();
 const mockListMarkdownFileBasenames = jest.fn();
 const mockLoadRepoIssues = jest.fn();
+const mockLoadFirstOtherPersonResponseAt = jest.fn();
 const mockLoadInternalMemberIndex = jest.fn();
 const mockResolveRepoNames = jest.fn();
 
@@ -28,6 +30,7 @@ jest.spyOn(FilesystemModule, "default").mockImplementation(() => ({
 	writeIssueNotes: mockWriteIssueNotes,
 	upsertTextFile: mockUpsertTextFile,
 	writeBinary: mockWriteBinary,
+	removeFileIfExists: mockRemoveFileIfExists,
 	readJson: mockReadJson,
 	readIssueNotes: mockReadIssueNotes,
 	purgeIssueNotes: mockPurgeIssueNotes,
@@ -36,6 +39,7 @@ jest.spyOn(FilesystemModule, "default").mockImplementation(() => ({
 
 jest.spyOn(GitlabLoaderModule, "default").mockImplementation(() => ({
 	loadRepoIssues: mockLoadRepoIssues,
+	loadFirstOtherPersonResponseAt: mockLoadFirstOtherPersonResponseAt,
 	resolveRepoNames: mockResolveRepoNames,
 }) as any);
 
@@ -206,6 +210,8 @@ function makePersistedIssueNote(overrides: Partial<NormalizedIssueNote> = {}): N
 		authorName: 'Partner A',
 		isInternalAuthor: false,
 		internalMatchedBy: 'none',
+		firstResponseAt: '',
+		firstResponseCheckedAt: '',
 		labels: [],
 		issueTypeRaw: 'issue',
 		requestKind: 'bug',
@@ -225,11 +231,13 @@ describe('SyncService', () => {
 		mockWriteIssueNotes.mockReset();
 		mockUpsertTextFile.mockReset();
 		mockWriteBinary.mockReset();
+		mockRemoveFileIfExists.mockReset();
 		mockReadJson.mockReset();
 		mockReadIssueNotes.mockReset();
 		mockPurgeIssueNotes.mockReset();
 		mockListMarkdownFileBasenames.mockReset();
 		mockLoadRepoIssues.mockReset();
+		mockLoadFirstOtherPersonResponseAt.mockReset();
 		mockLoadInternalMemberIndex.mockReset();
 		mockResolveRepoNames.mockReset();
 		mockEnsureFolders.mockResolvedValue(undefined);
@@ -237,10 +245,12 @@ describe('SyncService', () => {
 		mockWriteIssueNotes.mockResolvedValue([]);
 		mockUpsertTextFile.mockResolvedValue(undefined);
 		mockWriteBinary.mockResolvedValue(undefined);
+		mockRemoveFileIfExists.mockResolvedValue(undefined);
 		mockReadJson.mockResolvedValue(null);
 		mockReadIssueNotes.mockResolvedValue([]);
 		mockPurgeIssueNotes.mockResolvedValue(undefined);
 		mockListMarkdownFileBasenames.mockResolvedValue([]);
+		mockLoadFirstOtherPersonResponseAt.mockResolvedValue('');
 		mockLoadInternalMemberIndex.mockResolvedValue(makeInternalMemberLoadResult());
 		mockResolveRepoNames.mockImplementation(async () => ['repo-a']);
 	});
@@ -298,8 +308,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-17-brief.md',
 			expect.stringContaining('# Issue Daily Brief - 2026-06-17'),
 		);
-		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			3,
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'success',
@@ -316,7 +325,7 @@ describe('SyncService', () => {
 		const settings = makeSettings({repoList: ['repo-a'], generateDailyReports: false});
 		const onProgress = jest.fn();
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
-		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockReadIssueNotes.mockResolvedValue([makePersistedIssueNote()]);
 
 		const result = await new SyncService(mockApp, settings, onProgress).run();
 
@@ -342,7 +351,7 @@ describe('SyncService', () => {
 		const settings = makeSettings({repoList: ['repo-a'], generateDailyReports: false});
 		const onProgress = jest.fn();
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
-		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockReadIssueNotes.mockResolvedValue([makePersistedIssueNote()]);
 		mockWriteBinary.mockRejectedValueOnce(new Error('XLSX write failed'));
 
 		const result = await new SyncService(mockApp, settings, onProgress).run();
@@ -353,6 +362,112 @@ describe('SyncService', () => {
 			message: '同步完成，但 Excel 台账刷新失败',
 		});
 		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: true});
+	});
+
+	it('persists the first other-person response metadata without changing Issue write order', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockLoadRepoIssues.mockResolvedValueOnce([
+			makeIssue({iid: 78}),
+			makeIssue({
+				iid: 79,
+				state: 'closed',
+				web_url: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/79',
+				references: {short: '#79', relative: '#79', full: 'CPF-KMP-CMP/repo-a#79'},
+			}),
+		]);
+		mockLoadFirstOtherPersonResponseAt.mockResolvedValueOnce('2026-06-17T10:30:00+08:00');
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockLoadFirstOtherPersonResponseAt).toHaveBeenCalledWith('repo-a', 78, 'partner_a');
+		expect(mockWriteIssueNotes).toHaveBeenCalledWith([
+			expect.objectContaining({
+				iid: 78,
+				firstResponseAt: '2026-06-17T10:30:00+08:00',
+				firstResponseCheckedAt: '2026-06-17T12:00:00.000Z',
+			}),
+			expect.objectContaining({iid: 79}),
+		]);
+	});
+
+	it('skips comment requests for a first-seen historical closed Issue', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({state: 'closed'})]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockLoadFirstOtherPersonResponseAt).not.toHaveBeenCalled();
+	});
+
+	it('checks a tracked Issue once more when it transitions from open to closed', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		const existingNote = makePersistedIssueNote({
+			state: 'opened',
+			firstResponseAt: '2026-06-17T10:30:00+08:00',
+			firstResponseCheckedAt: '2026-06-17T11:00:00.000Z',
+		});
+		mockReadJson.mockImplementation(async (path: string) => (
+			path === 'GitCode Issues/meta/issue-ledger-state.json'
+				? {
+					nextSerial: 2,
+					serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+					issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#78': 'opened'},
+				}
+				: null
+		));
+		mockReadIssueNotes.mockResolvedValue([existingNote]);
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({state: 'closed'})]);
+		mockLoadFirstOtherPersonResponseAt.mockResolvedValueOnce('2026-06-17T10:30:00+08:00');
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockLoadFirstOtherPersonResponseAt).toHaveBeenCalledWith('repo-a', 78, 'partner_a');
+		expect(mockWriteIssueNotes).toHaveBeenCalledWith([
+			expect.objectContaining({
+				state: 'closed',
+				firstResponseAt: '2026-06-17T10:30:00+08:00',
+				firstResponseCheckedAt: '2026-06-17T12:00:00.000Z',
+			}),
+		]);
+	});
+
+	it('preserves response metadata and completes as degraded when a comment request fails', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		const existingNote = makePersistedIssueNote({
+			state: 'opened',
+			firstResponseAt: '2026-06-17T10:30:00+08:00',
+			firstResponseCheckedAt: '2026-06-17T11:00:00.000Z',
+		});
+		mockReadJson.mockImplementation(async (path: string) => (
+			path === 'GitCode Issues/meta/issue-ledger-state.json'
+				? {
+					nextSerial: 2,
+					serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+					issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#78': 'opened'},
+				}
+				: null
+		));
+		mockReadIssueNotes.mockResolvedValue([existingNote]);
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({state: 'closed'})]);
+		mockLoadFirstOtherPersonResponseAt.mockRejectedValueOnce(new Error('comments unavailable'));
+
+		const result = await new SyncService(mockApp, settings).run();
+
+		expect(mockWriteIssueNotes).toHaveBeenCalledWith([
+			expect.objectContaining({
+				firstResponseAt: '2026-06-17T10:30:00+08:00',
+				firstResponseCheckedAt: '2026-06-17T11:00:00.000Z',
+			}),
+		]);
+		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: false});
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to load first responses for 1 Issue(s)'),
+				]),
+			}),
+		);
 	});
 
 	it('keeps syncing remaining repos and marks outputs degraded when one repo fails', async () => {
@@ -394,8 +509,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-17-brief.md',
 			expect.any(String),
 		);
-		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			3,
+		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -539,7 +653,7 @@ describe('SyncService', () => {
 				}),
 			])
 			.mockRejectedValueOnce(new Error('repo-b failed'));
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 222,
 				iid: 15,
@@ -587,7 +701,7 @@ describe('SyncService', () => {
 				title: '[BUG] 当前同步结果',
 			}),
 		]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 222,
 				iid: 15,
@@ -643,7 +757,7 @@ describe('SyncService', () => {
 				labels: [],
 			}),
 		]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 222,
 				iid: 81,
@@ -694,7 +808,7 @@ describe('SyncService', () => {
 			lastSuccessfulSyncAt: '2026-06-18T12:00:00.000Z',
 		});
 		mockLoadRepoIssues.mockResolvedValueOnce([]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 4102400,
 				iid: 80,
@@ -721,7 +835,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(10);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
 		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
 			1,
 			'GitCode Issues/reports/daily/2026-06-19.md',
@@ -781,7 +895,7 @@ describe('SyncService', () => {
 			lastSuccessfulSyncAt: '2026-06-22T03:25:09.683Z',
 		});
 		mockLoadRepoIssues.mockResolvedValueOnce([]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 4102400,
 				iid: 80,
@@ -853,7 +967,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
 			expect.stringContaining('# Issue Daily Brief - 2026-06-22'),
 		);
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(10);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
 		expect(mockWriteJson).toHaveBeenLastCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
@@ -1124,7 +1238,7 @@ describe('SyncService', () => {
 				message: 'disk full',
 			},
 		]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 123456,
 				iid: 78,
@@ -1206,7 +1320,7 @@ describe('SyncService', () => {
 		mockLoadRepoIssues.mockResolvedValueOnce([
 			makeGitCodeIssue(),
 		]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 4102300,
 				iid: 76,
@@ -1282,7 +1396,7 @@ describe('SyncService', () => {
 				title: '添加媒体查询用户手册',
 			}),
 		]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 4102300,
 				iid: 76,
@@ -1323,7 +1437,7 @@ describe('SyncService', () => {
 		);
 	});
 
-	it('writes a stable issue ledger that marks a tracked issue after it closes', async () => {
+	it('writes a stable Excel ledger and removes the retired CSV after it closes', async () => {
 		const settings = makeSettings({
 			generateDailyReports: false,
 			internalMemberDirectory: {dev_a: '开发甲'},
@@ -1333,7 +1447,11 @@ describe('SyncService', () => {
 			authorName: 'GitCode Dev',
 		});
 		const closedNote = {...openedNote, state: 'closed', updatedAt: '2026-06-18T10:05:00+08:00'};
-		let previousSerialState: {nextSerial: number; serialByIssueKey: Record<string, number>} | null = null;
+		let previousSerialState: {
+			nextSerial: number;
+			serialByIssueKey: Record<string, number>;
+			issueStateByIssueKey?: Record<string, string>;
+		} | null = null;
 
 		mockReadJson.mockImplementation(async (path: string) => (
 			path === 'GitCode Issues/meta/issue-ledger-state.json' ? previousSerialState : null
@@ -1341,28 +1459,26 @@ describe('SyncService', () => {
 		mockLoadRepoIssues
 			.mockResolvedValueOnce([makeIssue()])
 			.mockResolvedValueOnce([makeIssue({state: 'closed'})]);
-		mockReadIssueNotes
-			.mockResolvedValueOnce([openedNote])
-			.mockResolvedValueOnce([closedNote]);
+		let issueNoteReadCount = 0;
+		mockReadIssueNotes.mockImplementation(async () => {
+			issueNoteReadCount += 1;
+			return issueNoteReadCount <= 3 ? [openedNote] : [closedNote];
+		});
 
 		await new SyncService(mockApp, settings).run();
 
 		const initialSerialState = {
 			nextSerial: 2,
 			serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+			issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#78': 'opened'},
 		};
-		expect(mockUpsertTextFile).toHaveBeenNthCalledWith(
-			1,
-			'GitCode Issues/reports/issue-ledger.csv',
-			expect.stringContaining('1,[BUG] 登录失败,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/78,,缺陷,opened,内部,Dev_A,开发甲,,2026/6/17 09:12:00,,'),
-		);
 		expect(mockWriteBinary).toHaveBeenNthCalledWith(
 			1,
 			'GitCode Issues/reports/issue-ledger.xlsx',
 			expect.any(Uint8Array),
 		);
-		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			2,
+		expect(mockRemoveFileIfExists).toHaveBeenCalledWith('GitCode Issues/reports/issue-ledger.csv');
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/issue-ledger-state.json',
 			initialSerialState,
 		);
@@ -1370,14 +1486,11 @@ describe('SyncService', () => {
 		previousSerialState = initialSerialState;
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledWith(
-			'GitCode Issues/reports/issue-ledger.csv',
-			expect.stringContaining('1,[BUG] 登录失败,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/78,,缺陷,closed,内部,Dev_A,开发甲,,2026/6/17 09:12:00,,'),
-		);
-		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			5,
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/issue-ledger-state.json',
-			initialSerialState,
+			expect.objectContaining({
+				issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#78': 'closed'},
+			}),
 		);
 	});
 
@@ -1388,7 +1501,7 @@ describe('SyncService', () => {
 			issueLedgerStartMonth: '2026-05',
 		});
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			makePersistedIssueNote({
 				title: '【bug】 登录失败',
 				authorUsername: 'missing_a',
@@ -1400,10 +1513,6 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledWith(
-			'GitCode Issues/reports/issue-ledger.csv',
-			expect.stringContaining('内部,missing_a,开发甲'),
-		);
 		expect(mockUpsertTextFile).toHaveBeenCalledWith(
 			'GitCode Issues/reports/internal-member-identity-review.md',
 			expect.stringContaining('为什么可能是内部人员：标题命中内部工作标记 `【bug】`'),
@@ -1417,7 +1526,7 @@ describe('SyncService', () => {
 	it('degrades sync but preserves ledger outputs when the roster-gap report write fails', async () => {
 		const settings = makeSettings({generateDailyReports: false});
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
-		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockReadIssueNotes.mockResolvedValue([makePersistedIssueNote()]);
 		mockUpsertTextFile.mockImplementation(async (path: string) => {
 			if (path === 'GitCode Issues/reports/internal-member-identity-review.md') {
 				throw new Error('review store unavailable');
@@ -1426,10 +1535,6 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledWith(
-			'GitCode Issues/reports/issue-ledger.csv',
-			expect.any(String),
-		);
 		expect(mockWriteBinary).toHaveBeenCalledWith(
 			'GitCode Issues/reports/issue-ledger.xlsx',
 			expect.any(Uint8Array),
@@ -1450,7 +1555,12 @@ describe('SyncService', () => {
 		const settings = makeSettings({generateDailyReports: false, issueLedgerStartMonth: '2026-05'});
 		const openedNote = makePersistedIssueNote();
 		const closedNote = {...openedNote, state: 'closed', updatedAt: '2026-06-18T10:05:00+08:00'};
-		let previousLedgerState: {nextSerial: number; serialByIssueKey: Record<string, number>; startMonth?: string} | null = null;
+		let previousLedgerState: {
+			nextSerial: number;
+			serialByIssueKey: Record<string, number>;
+			issueStateByIssueKey?: Record<string, string>;
+			startMonth?: string;
+		} | null = null;
 		let previousClosureState: {closedIssueKeys: string[]; startMonth?: string} | null = null;
 
 		mockReadJson.mockImplementation(async (path: string) => {
@@ -1465,17 +1575,20 @@ describe('SyncService', () => {
 		mockLoadRepoIssues
 			.mockResolvedValueOnce([makeIssue()])
 			.mockResolvedValueOnce([makeIssue({state: 'closed', updated_at: '2026-06-18T10:05:00+08:00'})]);
-		mockReadIssueNotes
-			.mockResolvedValueOnce([openedNote])
-			.mockResolvedValueOnce([closedNote]);
+		let issueNoteReadCount = 0;
+		mockReadIssueNotes.mockImplementation(async () => {
+			issueNoteReadCount += 1;
+			return issueNoteReadCount <= 3 ? [openedNote] : [closedNote];
+		});
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).toHaveBeenCalledTimes(2);
+		expect(mockUpsertTextFile).toHaveBeenCalledTimes(1);
 
 		previousLedgerState = {
 			nextSerial: 2,
 			serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
+			issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#78': 'opened'},
 			startMonth: '2026-05',
 		};
 		await new SyncService(mockApp, settings).run();
@@ -1484,17 +1597,16 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/issue-close-reminders.md',
 			expect.stringContaining('首次建立提醒基线'),
 		);
-		expect(mockWriteJson).toHaveBeenNthCalledWith(
-			6,
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/issue-closure-state.json',
 			{closedIssueKeys: ['CPF-KMP-CMP/repo-a#78'], startMonth: '2026-05'},
 		);
 	});
 
-	it('marks sync degraded and skips CSV output when the issue ledger state cannot be persisted', async () => {
+	it('marks sync degraded and skips Excel output when the issue ledger state cannot be persisted', async () => {
 		const settings = makeSettings({generateDailyReports: false});
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
-		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
+		mockReadIssueNotes.mockResolvedValue([makePersistedIssueNote()]);
 		mockWriteJson.mockImplementation(async (path: string) => {
 			if (path === 'GitCode Issues/meta/issue-ledger-state.json') {
 				throw new Error('state store unavailable');
@@ -1503,10 +1615,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockUpsertTextFile).not.toHaveBeenCalledWith(
-			'GitCode Issues/reports/issue-ledger.csv',
-			expect.any(String),
-		);
+		expect(mockWriteBinary).not.toHaveBeenCalled();
 		expect(mockUpsertTextFile).toHaveBeenCalledWith(
 			'GitCode Issues/reports/internal-member-identity-review.md',
 			expect.stringContaining('# 内部人员名单收集待补全报告'),
@@ -1523,12 +1632,12 @@ describe('SyncService', () => {
 		);
 	});
 
-	it('marks sync degraded when the issue ledger CSV cannot be persisted', async () => {
+	it('marks sync degraded when the issue ledger Excel file cannot be persisted', async () => {
 		const settings = makeSettings({generateDailyReports: false});
 		const onProgress = jest.fn();
 		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
-		mockReadIssueNotes.mockResolvedValueOnce([makePersistedIssueNote()]);
-		mockUpsertTextFile.mockRejectedValueOnce(new Error('CSV store unavailable'));
+		mockReadIssueNotes.mockResolvedValue([makePersistedIssueNote()]);
+		mockWriteBinary.mockRejectedValueOnce(new Error('XLSX store unavailable'));
 
 		await new SyncService(mockApp, settings, onProgress).run();
 
@@ -1546,14 +1655,14 @@ describe('SyncService', () => {
 				syncStatus: 'degraded',
 				repositorySyncStatus: 'degraded',
 				warningMessages: expect.arrayContaining([
-					expect.stringContaining('Failed to write issue ledger: CSV store unavailable'),
+					expect.stringContaining('Failed to write issue ledger: XLSX store unavailable'),
 				]),
 				}),
 			);
 		expect(onProgress).toHaveBeenLastCalledWith({
 			phase: 'complete',
 			percent: 100,
-			message: '同步完成，但 CSV 台账刷新失败',
+			message: '同步完成，但 Excel 台账刷新失败',
 		});
 	});
 
@@ -1609,7 +1718,7 @@ describe('SyncService', () => {
 				issue_type: 'issue',
 			} as Issue,
 		]);
-		mockReadIssueNotes.mockResolvedValueOnce([
+		mockReadIssueNotes.mockResolvedValue([
 			{
 				id: 501,
 				iid: 9,

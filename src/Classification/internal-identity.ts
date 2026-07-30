@@ -1,4 +1,10 @@
 import {NormalizedIssueNote} from '../Issues/issue-note';
+import {
+	buildIssueKey,
+	deduplicateIssues,
+	isOnOrAfterStartMonth,
+	normalizeStartMonth,
+} from '../Issues/issue-scope';
 
 export interface InternalIdentitySettings {
 	internalMemberDirectory?: Record<string, string>;
@@ -8,6 +14,14 @@ export interface InternalIdentitySettings {
 
 export interface InternalIssueEvidence {
 	kind: '内部编号' | '内部工作标记';
+	value: string;
+}
+
+export interface InternalAuthorEvidence {
+	issueKey: string;
+	createdAt: string;
+	state: string;
+	kind: InternalIssueEvidence['kind'] | '协作者目录';
 	value: string;
 }
 
@@ -59,14 +73,92 @@ export function findInternalIssueEvidence(
 	return titleMarker ? {kind: '内部工作标记', value: titleMarker} : null;
 }
 
+/**
+ * Indexes account-level identity evidence from every retained Issue revision.
+ * Closed Issues remain evidence here even when callers choose not to render
+ * them in a user-facing ledger.
+ */
+export function buildInternalAuthorEvidenceIndex(
+	issues: NormalizedIssueNote[],
+	settings: InternalIdentitySettings,
+	startMonth?: string,
+) {
+	const evidenceByUsername = new Map<string, InternalAuthorEvidence[]>();
+	const normalizedStartMonth = normalizeStartMonth(startMonth);
+
+	for (const issue of deduplicateIssues(issues)) {
+		if (!isOnOrAfterStartMonth(issue, normalizedStartMonth)) {
+			continue;
+		}
+
+		const username = normalizeUsername(issue.authorUsername);
+		if (!username) {
+			continue;
+		}
+
+		const entries = evidenceByUsername.get(username) ?? [];
+		const titleEvidence = findInternalIssueEvidence(issue.title, settings.internalReferencePrefixes);
+		if (titleEvidence) {
+			entries.push({
+				issueKey: buildIssueKey(issue),
+				createdAt: issue.createdAt,
+				state: issue.state,
+				kind: titleEvidence.kind,
+				value: titleEvidence.value,
+			});
+		}
+
+		if (issue.isInternalAuthor) {
+			entries.push({
+				issueKey: buildIssueKey(issue),
+				createdAt: issue.createdAt,
+				state: issue.state,
+				kind: '协作者目录',
+				value: formatCollaboratorEvidence(issue.internalMatchedBy),
+			});
+		}
+
+		if (entries.length > 0) {
+			evidenceByUsername.set(username, entries);
+		}
+	}
+
+	for (const entries of evidenceByUsername.values()) {
+		entries.sort(compareInternalAuthorEvidence);
+	}
+
+	return evidenceByUsername;
+}
+
 export function isIssueInternal(
 	issue: NormalizedIssueNote,
-	knownInternalUsernames: Set<string>,
+	internalUsernames: Set<string>,
 	configuredPrefixes?: string[],
 ) {
 	return issue.isInternalAuthor
-		|| knownInternalUsernames.has(normalizeUsername(issue.authorUsername))
+		|| internalUsernames.has(normalizeUsername(issue.authorUsername))
 		|| Boolean(findInternalIssueEvidence(issue.title, configuredPrefixes));
+}
+
+function formatCollaboratorEvidence(internalMatchedBy: string) {
+	const matchedBy = internalMatchedBy.trim();
+	return matchedBy && matchedBy !== 'none'
+		? `协作者目录:${matchedBy}`
+		: '协作者目录';
+}
+
+function compareInternalAuthorEvidence(left: InternalAuthorEvidence, right: InternalAuthorEvidence) {
+	const leftTime = Date.parse(left.createdAt);
+	const rightTime = Date.parse(right.createdAt);
+	if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+		return leftTime - rightTime;
+	}
+	if (Number.isFinite(leftTime) !== Number.isFinite(rightTime)) {
+		return Number.isFinite(leftTime) ? -1 : 1;
+	}
+	return left.issueKey.localeCompare(right.issueKey)
+		|| left.kind.localeCompare(right.kind)
+		|| left.value.localeCompare(right.value);
 }
 
 function findInternalReference(title: string, configuredPrefixes: string[] | undefined) {

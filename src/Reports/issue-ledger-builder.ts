@@ -1,6 +1,8 @@
 import {NormalizedIssueNote} from "../Issues/issue-note";
 import {
+	buildInternalAuthorEvidenceIndex,
 	findInternalIssueEvidence,
+	InternalAuthorEvidence,
 	normalizeInternalMemberDirectory,
 	normalizeUsername,
 } from '../Classification/internal-identity';
@@ -14,6 +16,7 @@ import {
 export interface IssueLedgerSerialState {
 	nextSerial: number;
 	serialByIssueKey: Record<string, number>;
+	issueStateByIssueKey?: Record<string, string>;
 	startMonth?: string;
 }
 
@@ -39,12 +42,12 @@ export interface IssueLedgerRow {
 	department: string;
 	firstResponseAt: string;
 	firstResponseDuration: string;
+	newlyClosed: boolean;
 	evidence: string;
 }
 
 export interface IssueLedgerBuildResult {
 	rows: IssueLedgerRow[];
-	csv: string;
 	serialState: IssueLedgerSerialState;
 }
 
@@ -60,8 +63,8 @@ export const ISSUE_LEDGER_HEADERS = [
 	'姓名',
 	'公司部门',
 	'创建时间',
-	'首次相应时间',
-	'首次相应时长格式',
+	'首次响应时间',
+	'首次响应时长',
 ];
 const CREATED_AT_FORMATTER = new Intl.DateTimeFormat('en-US', {
 	timeZone: 'Asia/Shanghai',
@@ -87,6 +90,7 @@ export function buildIssueLedger(
 
 	const uniqueIssues = deduplicateIssues(issues);
 	const startMonth = normalizeStartMonth(settings.startMonth);
+	const internalEvidenceByUsername = buildInternalAuthorEvidenceIndex(uniqueIssues, settings, startMonth);
 	const eligibleIssues = uniqueIssues.filter((issue) => isOnOrAfterStartMonth(issue, startMonth));
 	const eligibleIssueKeys = new Set(eligibleIssues.map(buildIssueKey));
 	const shouldResetSerialState = normalizeStartMonth(previousState?.startMonth) !== startMonth;
@@ -100,6 +104,9 @@ export function buildIssueLedger(
 		? 1
 		: resolveNextSerial(previousState?.nextSerial, serialByIssueKey);
 	const previouslyTrackedIssueKeys = new Set(Object.keys(serialByIssueKey));
+	const previousIssueStates = shouldResetSerialState
+		? {}
+		: normalizeIssueStateByIssueKey(previousState?.issueStateByIssueKey);
 
 	for (const issue of [...eligibleIssues].filter((issue) => !isClosedIssue(issue)).sort(compareNewIssues)) {
 		const issueKey = buildIssueKey(issue);
@@ -118,16 +125,28 @@ export function buildIssueLedger(
 				throw new Error(`Missing ledger serial for ${issueKey}`);
 			}
 
-			return buildRow(issue, serial, directory, whitelist, settings);
+			return buildRow(
+				issue,
+				serial,
+				directory,
+				whitelist,
+				internalEvidenceByUsername,
+				settings,
+				isClosedIssue(issue) && previouslyTrackedIssueKeys.has(issueKey) && isOpenIssueState(previousIssueStates[issueKey]),
+			);
 		})
 		.sort((left, right) => left.serial - right.serial || left.issueKey.localeCompare(right.issueKey));
 
 	return {
 		rows,
-		csv: buildCsv(rows),
 		serialState: {
 			nextSerial,
 			serialByIssueKey,
+			issueStateByIssueKey: Object.fromEntries(
+				eligibleIssues
+					.filter((issue) => serialByIssueKey[buildIssueKey(issue)] !== undefined)
+					.map((issue) => [buildIssueKey(issue), issue.state]),
+			),
 			...(startMonth ? {startMonth} : {}),
 		},
 	};
@@ -137,22 +156,34 @@ function isClosedIssue(issue: Pick<NormalizedIssueNote, 'state'>) {
 	return issue.state.trim().toLowerCase() === 'closed';
 }
 
+function isOpenIssueState(state: string | undefined) {
+	const normalizedState = state?.trim().toLowerCase();
+	return normalizedState === 'open' || normalizedState === 'opened';
+}
+
 function buildRow(
 	issue: NormalizedIssueNote,
 	serial: number,
 	directory: Map<string, string>,
 	whitelist: Set<string>,
+	internalEvidenceByUsername: Map<string, InternalAuthorEvidence[]>,
 	settings: IssueLedgerSettings,
+	newlyClosed: boolean,
 ): IssueLedgerRow {
 	const username = normalizeUsername(issue.authorUsername);
 	const directoryName = directory.get(username);
 	const isWhitelisted = whitelist.has(username);
 	const internalEvidence = findInternalIssueEvidence(issue.title, settings.internalReferencePrefixes)?.value;
+	const relatedIdentityEvidence = findRelatedIdentityEvidence(
+		internalEvidenceByUsername.get(username),
+		buildIssueKey(issue),
+	);
 	const identity = resolveConfirmedInternalIdentity(issue, directoryName, isWhitelisted);
 	const personnelType = identity?.personnelType
-		?? (internalEvidence ? '内部' : '外部伙伴');
+		?? (internalEvidence || relatedIdentityEvidence ? '内部' : '外部伙伴');
 	const evidence = identity?.evidence
 		?? internalEvidence
+		?? (relatedIdentityEvidence ? formatRelatedIdentityEvidence(relatedIdentityEvidence) : null)
 		?? (username ? '外部账号' : '未提供账号，未命中内部编号或工作标记');
 
 	return {
@@ -168,10 +199,25 @@ function buildRow(
 		name: personnelType === '内部' ? (directoryName || issue.authorName).trim() : '',
 		personnelType,
 		department: '',
-		firstResponseAt: '',
-		firstResponseDuration: '',
+		firstResponseAt: formatFirstResponseAt(issue.createdAt, issue.firstResponseAt),
+		firstResponseDuration: formatFirstResponseDuration(issue.createdAt, issue.firstResponseAt),
+		newlyClosed,
 		evidence,
 	};
+}
+
+function findRelatedIdentityEvidence(
+	evidence: InternalAuthorEvidence[] | undefined,
+	currentIssueKey: string,
+) {
+	return evidence?.find((entry) => entry.issueKey !== currentIssueKey) ?? null;
+}
+
+function formatRelatedIdentityEvidence(evidence: InternalAuthorEvidence) {
+	const source = evidence.state.trim().toLowerCase() === 'closed'
+		? '历史关闭 Issue'
+		: '已同步 Issue';
+	return `${source}：${evidence.kind} ${evidence.value}（${evidence.issueKey}）`;
 }
 
 function resolveConfirmedInternalIdentity(
@@ -208,6 +254,41 @@ function formatCreatedAt(createdAt: string) {
 		+ ` ${parts.get('hour')}:${parts.get('minute')}:${parts.get('second')}`;
 }
 
+function formatFirstResponseAt(createdAt: string, firstResponseAt: string | undefined) {
+	const normalizedResponseAt = firstResponseAt?.trim() ?? '';
+	const createdTime = Date.parse(createdAt);
+	const responseTime = Date.parse(normalizedResponseAt);
+	if (!normalizedResponseAt || !Number.isFinite(createdTime) || !Number.isFinite(responseTime) || responseTime < createdTime) {
+		return '';
+	}
+
+	return formatCreatedAt(normalizedResponseAt);
+}
+
+function formatFirstResponseDuration(createdAt: string, firstResponseAt: string | undefined) {
+	const normalizedResponseAt = firstResponseAt?.trim() ?? '';
+	if (!normalizedResponseAt) {
+		return '';
+	}
+
+	const createdTime = Date.parse(createdAt);
+	const responseTime = Date.parse(normalizedResponseAt);
+	if (!Number.isFinite(createdTime) || !Number.isFinite(responseTime) || responseTime < createdTime) {
+		return '';
+	}
+
+	let remainingMinutes = Math.floor((responseTime - createdTime) / 60_000);
+	const days = Math.floor(remainingMinutes / (24 * 60));
+	remainingMinutes -= days * 24 * 60;
+	const hours = Math.floor(remainingMinutes / 60);
+	const minutes = remainingMinutes - hours * 60;
+	return [
+		...(days ? [`${days}天`] : []),
+		...(hours ? [`${hours}小时`] : []),
+		`${minutes}分钟`,
+	].join(' ');
+}
+
 function formatCategory(requestKind: NormalizedIssueNote['requestKind']) {
 	switch (requestKind) {
 		case 'bug':
@@ -225,6 +306,13 @@ function normalizeSerialByIssueKey(serialByIssueKey: Record<string, number> | un
 	);
 }
 
+function normalizeIssueStateByIssueKey(issueStateByIssueKey: Record<string, string> | undefined) {
+	return Object.fromEntries(
+		Object.entries(issueStateByIssueKey ?? {})
+			.filter(([issueKey, state]) => issueKey.trim().length > 0 && typeof state === 'string' && state.trim().length > 0),
+	);
+}
+
 function resolveNextSerial(nextSerial: number | undefined, serialByIssueKey: Record<string, number>): number {
 	const maximumExistingSerial = Math.max(0, ...Object.values(serialByIssueKey));
 	const candidate = typeof nextSerial === 'number' ? nextSerial : 0;
@@ -235,32 +323,4 @@ function resolveNextSerial(nextSerial: number | undefined, serialByIssueKey: Rec
 
 function compareNewIssues(left: NormalizedIssueNote, right: NormalizedIssueNote) {
 	return left.createdAt.localeCompare(right.createdAt) || buildIssueKey(left).localeCompare(buildIssueKey(right));
-}
-
-function buildCsv(rows: IssueLedgerRow[]) {
-	return [
-		ISSUE_LEDGER_HEADERS.join(','),
-		...rows.map((row) => [
-			row.serial,
-			row.title,
-			row.url,
-			row.responsible,
-			row.category,
-			row.state,
-			row.personnelType,
-			row.username,
-			row.name,
-			row.department,
-			row.createdAt,
-			row.firstResponseAt,
-			row.firstResponseDuration,
-		].map(escapeCsvField).join(',')),
-	].join('\n');
-}
-
-function escapeCsvField(value: string | number) {
-	const stringValue = String(value);
-	return /[",\r\n]/.test(stringValue)
-		? `"${stringValue.replace(/"/g, '""')}"`
-		: stringValue;
 }

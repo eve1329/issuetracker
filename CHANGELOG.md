@@ -2,8 +2,12 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
-## Unreleased
+## 0.2.5 - 2026-07-30
 
+- Replace the CSV ledger with the native-hyperlink XLSX ledger; a successful Excel refresh removes the retired CSV output.
+- Populate first response time from the first non-author, non-system Issue comment, retaining only the selected timestamp and check time rather than comment content.
+- Show a dark high-contrast XLSX row for a tracked Issue that transitions from open to closed during the current sync, and retain the previous state baseline if Excel writing fails so a retry is still highlighted.
+- Keep historical closed Issues out of first-time ledger rows while reusing their internal-reference and collaborator evidence for same-account identity checks in ledger and daily-report counts.
 - Treat `IR` / `SR` references and internal workflow markers, including `【bug】` and plain `门禁测试`, as internal-person evidence even when an author account is present.
 - Apply the confirmed member directory and internal title evidence consistently to ledger, daily-report, and AI-brief external counts.
 - Generate `internal-member-identity-review.md` on every sync, grouping accounts missing from the confirmed directory with the exact reason and related Issues.

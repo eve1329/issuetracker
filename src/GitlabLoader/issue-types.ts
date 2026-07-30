@@ -32,6 +32,19 @@ export interface GitCodeOrgRepository {
 	readonly open_issues_count?: number;
 }
 
+export interface IssueComment {
+	readonly created_at?: string;
+	readonly system?: boolean;
+	readonly author?: {
+		readonly username?: string;
+		readonly login?: string;
+	};
+	readonly user?: {
+		readonly username?: string;
+		readonly login?: string;
+	};
+}
+
 export interface Epic {
 	readonly id: number,
 	readonly iid: number,

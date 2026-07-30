@@ -18,6 +18,8 @@ function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssu
 		authorName: 'Partner A',
 		isInternalAuthor: false,
 		internalMatchedBy: 'none',
+		firstResponseAt: '',
+		firstResponseCheckedAt: '',
 		labels: [],
 		issueTypeRaw: 'issue',
 		requestKind: 'unknown',
@@ -130,5 +132,34 @@ describe('buildInternalMemberIdentityReview', () => {
 
 		expect(result.evidenceIssueCount).toBe(0);
 		expect(result.candidates).toEqual([]);
+	});
+
+	it('retains closed internal-reference Issues as roster identity evidence', () => {
+		const result = buildInternalMemberIdentityReview([
+			makeIssue({
+				iid: 16,
+				title: 'IR002: 历史内部工作项',
+				state: 'closed',
+				authorUsername: 'zhangjuncheng8',
+				authorName: 'Kyoma',
+				projectPath: 'CPF-KMP-CMP/docs',
+				sourceRepo: 'docs',
+				webUrl: 'https://gitcode.com/CPF-KMP-CMP/docs/issues/16',
+			}),
+		], {
+			internalMemberDirectory: {},
+		});
+
+		expect(result.candidates).toEqual([
+			expect.objectContaining({
+				username: 'zhangjuncheng8',
+				issues: [expect.objectContaining({
+					issueKey: 'CPF-KMP-CMP/docs#16',
+					state: 'closed',
+					evidence: 'IR002',
+				})],
+			}),
+		]);
+		expect(result.markdown).toContain('已关闭 Issue 不进入首次台账，但会保留为内部身份判定证据');
 	});
 });

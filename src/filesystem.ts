@@ -47,6 +47,13 @@ export default class Filesystem {
 		await this.vault.adapter.writeBinary(path, bytes);
 	}
 
+	public async removeFileIfExists(path: string) {
+		const existingFile = this.vault.getAbstractFileByPath(path);
+		if (existingFile instanceof TFile) {
+			await this.vault.delete(existingFile);
+		}
+	}
+
 	public async writeJson(path: string, value: unknown) {
 		const content = JSON.stringify(value, null, 2) ?? 'null';
 
@@ -252,10 +259,12 @@ export default class Filesystem {
 				sourceScope: String(frontmatter.sourceScope ?? 'project') as NormalizedIssueNote['sourceScope'],
 				sourceRepo: String(frontmatter.sourceRepo ?? ''),
 				authorUsername: String(frontmatter.authorUsername ?? ''),
-				authorName: String(frontmatter.authorName ?? ''),
-				isInternalAuthor: Boolean(frontmatter.isInternalAuthor),
-				internalMatchedBy: String(frontmatter.internalMatchedBy ?? 'none') as NormalizedIssueNote['internalMatchedBy'],
-				labels: Array.isArray(frontmatter.labels) ? frontmatter.labels.map((label: unknown) => String(label)) : [],
+					authorName: String(frontmatter.authorName ?? ''),
+					isInternalAuthor: Boolean(frontmatter.isInternalAuthor),
+					internalMatchedBy: String(frontmatter.internalMatchedBy ?? 'none') as NormalizedIssueNote['internalMatchedBy'],
+					firstResponseAt: String(frontmatter.firstResponseAt ?? ''),
+					firstResponseCheckedAt: String(frontmatter.firstResponseCheckedAt ?? ''),
+					labels: Array.isArray(frontmatter.labels) ? frontmatter.labels.map((label: unknown) => String(label)) : [],
 				issueTypeRaw: String(frontmatter.issueTypeRaw ?? ''),
 				requestKind: String(frontmatter.requestKind ?? 'unknown') as NormalizedIssueNote['requestKind'],
 				requestKindMatchedBy: String(frontmatter.requestKindMatchedBy ?? 'none') as NormalizedIssueNote['requestKindMatchedBy'],

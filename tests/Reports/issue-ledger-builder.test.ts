@@ -21,6 +21,8 @@ function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssu
 		authorName: 'Partner A',
 		isInternalAuthor: false,
 		internalMatchedBy: 'none',
+		firstResponseAt: '',
+		firstResponseCheckedAt: '',
 		labels: [],
 		issueTypeRaw: 'issue',
 		requestKind: 'unknown',
@@ -89,10 +91,51 @@ describe('buildIssueLedger', () => {
 				'CPF-KMP-CMP/repo-a#8': 1,
 				'CPF-KMP-CMP/repo-a#9': 2,
 			},
+			issueStateByIssueKey: {
+				'CPF-KMP-CMP/repo-a#8': 'open',
+				'CPF-KMP-CMP/repo-a#9': 'open',
+			},
 		});
-		expect(result.csv).toContain('序号,问题,链接,响应人/责任人,分类,状态,Issue来源方,code账号,姓名,公司部门,创建时间,首次相应时间,首次相应时长格式');
-		expect(result.csv).not.toContain('白名单人员问题');
-		expect(result.csv).toContain('1,IR001 编号问题,https://gitcode.com/CPF-KMP-CMP/repo-a/issues/8,,需求,open,内部,not-listed,Internal Reporter,,2026/7/27 09:00:00,,');
+	});
+
+	it('uses a historical closed Issue as identity evidence without displaying that Issue', () => {
+		const result = buildIssueLedger(
+			[
+				makeIssue({
+					iid: 16,
+					title: 'IR002: 历史内部工作项',
+					state: 'closed',
+					createdAt: '2026-05-25T20:05:46+08:00',
+					authorUsername: 'zhangjuncheng8',
+					authorName: 'Kyoma',
+					webUrl: 'https://gitcode.com/CPF-KMP-CMP/docs/issues/16',
+					sourceRepo: 'docs',
+					projectPath: 'CPF-KMP-CMP/docs',
+				}),
+				makeIssue({
+					iid: 44,
+					title: '补充最新使用说明',
+					state: 'open',
+					createdAt: '2026-06-10T09:00:00+08:00',
+					authorUsername: 'zhangjuncheng8',
+					authorName: 'Kyoma',
+					webUrl: 'https://gitcode.com/CPF-KMP-CMP/docs/issues/44',
+					sourceRepo: 'docs',
+					projectPath: 'CPF-KMP-CMP/docs',
+				}),
+			],
+			{internalMemberDirectory: {}, internalUserWhitelist: [], startMonth: '2026-05'},
+			null,
+		);
+
+		expect(result.rows).toEqual([
+			expect.objectContaining({
+				issueKey: 'CPF-KMP-CMP/docs#44',
+				personnelType: '内部',
+				name: 'Kyoma',
+				evidence: '历史关闭 Issue：内部编号 IR002（CPF-KMP-CMP/docs#16）',
+			}),
+		]);
 	});
 
 	it('starts tracking from the configured month and resets serials when the month changes', () => {
@@ -118,6 +161,7 @@ describe('buildIssueLedger', () => {
 		expect(result.serialState).toEqual({
 			nextSerial: 2,
 			serialByIssueKey: {'CPF-KMP-CMP/repo-a#2': 1},
+			issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#2': 'open'},
 			startMonth: '2026-05',
 		});
 	});
@@ -132,23 +176,77 @@ describe('buildIssueLedger', () => {
 		expect(result.rows[0].createdAt).toBe('2026/5/25 14:58:00');
 	});
 
-	it('marks a tracked open issue when it later closes', () => {
+	it('formats the first other-person response in China Standard Time with its elapsed duration', () => {
+		const result = buildIssueLedger(
+			[makeIssue({
+				createdAt: '2026-05-25T06:58:00Z',
+				firstResponseAt: '2026-05-26T09:01:00Z',
+			})],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+
+		expect(result.rows[0]).toEqual(expect.objectContaining({
+			firstResponseAt: '2026/5/26 17:01:00',
+			firstResponseDuration: '1天 2小时 3分钟',
+		}));
+	});
+
+	it('leaves invalid or pre-creation first responses blank', () => {
+		const result = buildIssueLedger(
+			[
+				makeIssue({iid: 1, firstResponseAt: 'not-a-date'}),
+				makeIssue({iid: 2, firstResponseAt: '2026-07-27T08:59:00+08:00'}),
+			],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+
+		expect(result.rows.map((row) => [row.firstResponseAt, row.firstResponseDuration])).toEqual([
+			['', ''],
+			['', ''],
+		]);
+	});
+
+	it('marks only a previously open tracked issue when it later closes', () => {
 		const result = buildIssueLedger(
 			[makeIssue({iid: 7, state: 'closed'})],
 			{internalMemberDirectory: {}, internalUserWhitelist: []},
 			{
 				nextSerial: 2,
 				serialByIssueKey: {'CPF-KMP-CMP/repo-a#7': 1},
+				issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#7': 'opened'},
 			},
 		);
 
 		expect(result.rows).toEqual([
-			expect.objectContaining({serial: 1, state: 'closed'}),
+			expect.objectContaining({serial: 1, state: 'closed', newlyClosed: true}),
 		]);
 		expect(result.serialState).toEqual({
 			nextSerial: 2,
 			serialByIssueKey: {'CPF-KMP-CMP/repo-a#7': 1},
+			issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#7': 'closed'},
 		});
+	});
+
+	it('does not mark a first-seen or already-closed Issue as newly closed', () => {
+		const firstSeen = buildIssueLedger(
+			[makeIssue({iid: 7, state: 'closed'})],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			null,
+		);
+		const alreadyClosed = buildIssueLedger(
+			[makeIssue({iid: 7, state: 'closed'})],
+			{internalMemberDirectory: {}, internalUserWhitelist: []},
+			{
+				nextSerial: 2,
+				serialByIssueKey: {'CPF-KMP-CMP/repo-a#7': 1},
+				issueStateByIssueKey: {'CPF-KMP-CMP/repo-a#7': 'closed'},
+			},
+		);
+
+		expect(firstSeen.rows).toEqual([]);
+		expect(alreadyClosed.rows[0].newlyClosed).toBe(false);
 	});
 
 	it('filters the GitLab opened state as visible', () => {
@@ -211,8 +309,6 @@ describe('buildIssueLedger', () => {
 			personnelType: '外部伙伴',
 			evidence: '外部账号',
 		}));
-		expect(result.csv).toContain('外部伙伴,cylde,,,');
-		expect(result.csv).not.toContain('哎呀');
 	});
 
 	it('keeps a confirmed internal author internal before evaluating title markers', () => {
@@ -234,7 +330,7 @@ describe('buildIssueLedger', () => {
 		}));
 	});
 
-	it('does not classify an embedded prefix as internal and escapes CSV fields', () => {
+	it('does not classify an embedded prefix as internal', () => {
 		const result = buildIssueLedger(
 			[
 				makeIssue({
@@ -251,6 +347,5 @@ describe('buildIssueLedger', () => {
 			personnelType: '外部伙伴',
 			evidence: '外部账号',
 		}));
-		expect(result.csv).toContain('1,"BIR123 is not an internal reference, ""quoted"""');
 	});
 });

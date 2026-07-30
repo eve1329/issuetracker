@@ -13,6 +13,7 @@ import {buildIssueLedger, IssueLedgerSerialState} from "../Reports/issue-ledger-
 import {buildIssueLedgerXlsx} from "../Reports/issue-ledger-xlsx-builder";
 import {buildIssueClosureNotice, IssueClosureState} from "../Reports/issue-closure-notice-builder";
 import {buildInternalMemberIdentityReview} from "../Reports/internal-member-identity-review-builder";
+import {buildIssueKey, isOnOrAfterStartMonth, normalizeStartMonth} from '../Issues/issue-scope';
 import {logger} from "../utils/utils";
 
 export type SyncProgressPhase = 'starting' | 'members' | 'issues' | 'issue-files' | 'reports' | 'ledger' | 'closing' | 'complete';
@@ -28,13 +29,14 @@ export interface SyncRunResult {
 	ledgerWriteFailed: boolean;
 }
 
-type LedgerWriteStage = 'prepare' | 'state' | 'csv' | 'xlsx';
+type LedgerWriteStage = 'prepare' | 'state' | 'xlsx' | 'final-state' | 'cleanup';
 
 const LEDGER_FAILURE_PROGRESS: Record<LedgerWriteStage, Pick<SyncProgress, 'percent' | 'message'>> = {
-	prepare: {percent: 82, message: '台账准备失败'},
-	state: {percent: 82, message: '台账状态保存失败'},
-	csv: {percent: 88, message: 'CSV 台账刷新失败'},
+	prepare: {percent: 82, message: 'Excel 台账准备失败'},
+	state: {percent: 82, message: 'Excel 台账状态保存失败'},
 	xlsx: {percent: 96, message: 'Excel 台账刷新失败'},
+	'final-state': {percent: 96, message: 'Excel 台账状态确认失败'},
+	cleanup: {percent: 96, message: '旧 CSV 台账清理失败'},
 };
 
 interface SyncState {
@@ -47,8 +49,21 @@ interface SyncState {
 	memberSyncProgress?: InternalMemberIndex['syncProgress'];
 }
 
+interface FirstResponseCandidate {
+	repoName: string;
+	note: NormalizedIssueNote;
+	noteIndex: number;
+}
+
+interface FirstResponseLoadResult {
+	notes: NormalizedIssueNote[];
+	failureCount: number;
+	failureExample: string;
+}
+
 export default class SyncService {
 	private static readonly RECENT_REPORT_REPAIR_DAYS = 7;
+	private static readonly FIRST_RESPONSE_CONCURRENCY = 4;
 
 	private readonly fs: Filesystem;
 	private readonly loader: GitlabLoader;
@@ -71,6 +86,9 @@ export default class SyncService {
 		const dailyReportsFolder = `${this.settings.reportsFolder}/daily`;
 		const dailyBriefsFolder = `${this.settings.reportsFolder}/daily-brief`;
 		const previousSyncState = await this.fs.readJson<SyncState>(`${this.settings.metaFolder}/sync-state.json`);
+		const previousLedgerState = await this.fs.readJson<IssueLedgerSerialState>(
+			`${this.settings.metaFolder}/issue-ledger-state.json`,
+		);
 		const warningMessages: string[] = [];
 		const repoNames = await this.loader.resolveRepoNames();
 		this.reportProgress('members', 5, `已发现 ${repoNames.length} 个仓库，正在同步内部成员`);
@@ -118,7 +136,7 @@ export default class SyncService {
 		const failedRepos: string[] = [];
 		const failedRepoSet = new Set<string>();
 		let issueStorageFailed = false;
-		let hasUnknownClassifications = false;
+		let firstResponseFetchFailed = false;
 
 		for (const [repoIndex, repoName] of repoNames.entries()) {
 			const percent = 12 + Math.round((repoIndex / Math.max(repoNames.length, 1)) * 43);
@@ -126,11 +144,6 @@ export default class SyncService {
 			try {
 				const repoIssues = await this.loader.loadRepoIssues(repoName);
 				repoIssueBatches.push({repoName, issues: repoIssues});
-				if (!hasUnknownClassifications) {
-					hasUnknownClassifications = repoIssues.some((issue) => (
-						classifyIssue(issue, this.settings.classificationRules).requestKind === 'unknown'
-					));
-				}
 			} catch (error) {
 				failedRepos.push(repoName);
 				failedRepoSet.add(repoName);
@@ -140,18 +153,42 @@ export default class SyncService {
 		}
 		this.reportProgress('issue-files', 55, '正在写入 Issue 文件');
 
-		let existingNotesByKey = new Map<string, NormalizedIssueNote>();
-		if (hasUnknownClassifications) {
-			const existingIssueNotes = await this.fs.readIssueNotes();
-			existingNotesByKey = new Map(
-				existingIssueNotes.map((note) => [this.buildIssueKey(note.sourceRepo, note.iid), note]),
-			);
+		const existingIssueNotes = await this.fs.readIssueNotes();
+		const existingNotesByKey = new Map(
+			existingIssueNotes.map((note) => [this.buildIssueKey(note.sourceRepo, note.iid), note]),
+		);
+		const startMonth = normalizeStartMonth(this.settings.issueLedgerStartMonth);
+		const previousTrackedIssueKeys = normalizeStartMonth(previousLedgerState?.startMonth) === startMonth
+			? new Set(Object.keys(previousLedgerState?.serialByIssueKey ?? {}))
+			: new Set<string>();
+		const firstResponseCandidates: FirstResponseCandidate[] = [];
+		for (const {repoName, issues} of repoIssueBatches) {
+			for (const issue of issues) {
+				const note = this.normalizeIssue(issue, repoName, internalMembers, existingNotesByKey);
+				const existingNote = existingNotesByKey.get(this.buildIssueKey(note.sourceRepo, note.iid));
+				normalizedNotes.push(note);
+				if (this.shouldLoadFirstResponse(note, existingNote, previousTrackedIssueKeys, startMonth)) {
+					firstResponseCandidates.push({
+						repoName,
+						note,
+						noteIndex: normalizedNotes.length - 1,
+					});
+				}
+			}
 		}
 
-		for (const {repoName, issues} of repoIssueBatches) {
-			normalizedNotes.push(
-				...issues.map((issue) => this.normalizeIssue(issue, repoName, internalMembers, existingNotesByKey)),
-			);
+		if (firstResponseCandidates.length > 0) {
+			this.reportProgress('issue-files', 58, `正在补充首次响应（${firstResponseCandidates.length} 条）`);
+		}
+		const firstResponseLoadResult = await this.loadFirstResponses(firstResponseCandidates, syncTime);
+		for (const [candidateIndex, note] of firstResponseLoadResult.notes.entries()) {
+			normalizedNotes[firstResponseCandidates[candidateIndex].noteIndex] = note;
+		}
+		if (firstResponseLoadResult.failureCount > 0) {
+			firstResponseFetchFailed = true;
+			const message = `Failed to load first responses for ${firstResponseLoadResult.failureCount} Issue(s): ${firstResponseLoadResult.failureExample}`;
+			warningMessages.push(message);
+			logger(message);
 		}
 
 		if (this.settings.purgeIssues) {
@@ -176,7 +213,7 @@ export default class SyncService {
 			}
 		}
 
-		let repositorySyncStatus: NonNullable<SyncState['repositorySyncStatus']> = failedRepos.length > 0 || issueStorageFailed
+		let repositorySyncStatus: NonNullable<SyncState['repositorySyncStatus']> = failedRepos.length > 0 || issueStorageFailed || firstResponseFetchFailed
 			? 'degraded'
 			: 'success';
 		let reportWriteFailed = false;
@@ -228,27 +265,29 @@ export default class SyncService {
 		let ledgerWriteFailed = false;
 		let ledgerWriteStage: LedgerWriteStage = 'prepare';
 		let ledgerFailureMessage = '台账刷新失败';
-		this.reportProgress('ledger', 82, '正在准备 CSV / Excel 台账');
+		this.reportProgress('ledger', 82, '正在准备 Excel 台账');
 		try {
 			persistedNotes ??= await this.fs.readIssueNotes();
-			const previousSerialState = await this.fs.readJson<IssueLedgerSerialState>(
-				`${this.settings.metaFolder}/issue-ledger-state.json`,
-			);
 			const ledger = buildIssueLedger(persistedNotes, {
 				internalMemberDirectory: this.settings.internalMemberDirectory,
 				internalUserWhitelist: this.settings.internalUserWhitelist,
 				startMonth: this.settings.issueLedgerStartMonth,
-			}, previousSerialState);
+			}, previousLedgerState);
 
-			// Persist allocation first so a CSV write retry cannot assign a different serial.
+			// Persist serials before Excel so a retry cannot reallocate them, but retain the
+			// last durable state baseline until the Excel file itself has been written.
 			ledgerWriteStage = 'state';
-			await this.fs.writeJson(`${this.settings.metaFolder}/issue-ledger-state.json`, ledger.serialState);
-			ledgerWriteStage = 'csv';
-			this.reportProgress('ledger', 88, '正在写入 CSV 台账');
-			await this.fs.upsertTextFile(`${this.settings.reportsFolder}/issue-ledger.csv`, ledger.csv);
+			await this.fs.writeJson(
+				`${this.settings.metaFolder}/issue-ledger-state.json`,
+				this.buildPreExcelLedgerState(ledger.serialState, previousLedgerState),
+			);
 			ledgerWriteStage = 'xlsx';
 			this.reportProgress('ledger', 94, '正在写入 Excel 台账');
 			await this.fs.writeBinary(`${this.settings.reportsFolder}/issue-ledger.xlsx`, buildIssueLedgerXlsx(ledger.rows));
+			ledgerWriteStage = 'final-state';
+			await this.fs.writeJson(`${this.settings.metaFolder}/issue-ledger-state.json`, ledger.serialState);
+			ledgerWriteStage = 'cleanup';
+			await this.fs.removeFileIfExists(`${this.settings.reportsFolder}/issue-ledger.csv`);
 			this.reportProgress('ledger', 96, 'Excel 台账已刷新');
 		} catch (error) {
 			ledgerWriteFailed = true;
@@ -357,6 +396,93 @@ export default class SyncService {
 		}
 	}
 
+	private shouldLoadFirstResponse(
+		note: NormalizedIssueNote,
+		existingNote: NormalizedIssueNote | undefined,
+		previouslyTrackedIssueKeys: Set<string>,
+		startMonth: string,
+	) {
+		if (!isOnOrAfterStartMonth(note, startMonth)) {
+			return false;
+		}
+
+		const issueKey = buildIssueKey(note);
+		const isClosed = note.state.trim().toLowerCase() === 'closed';
+		if (!isClosed) {
+			return !note.firstResponseAt.trim();
+		}
+
+		if (!previouslyTrackedIssueKeys.has(issueKey)) {
+			return false;
+		}
+
+		const wasOpen = existingNote && ['open', 'opened'].includes(existingNote.state.trim().toLowerCase());
+		return Boolean(wasOpen) || (!note.firstResponseAt.trim() && !note.firstResponseCheckedAt.trim());
+	}
+
+	private buildPreExcelLedgerState(
+		currentState: IssueLedgerSerialState,
+		previousState: IssueLedgerSerialState | null,
+	): IssueLedgerSerialState {
+		const previousStates = normalizeStartMonth(previousState?.startMonth) === normalizeStartMonth(currentState.startMonth)
+			? previousState?.issueStateByIssueKey ?? {}
+			: {};
+		return {
+			...currentState,
+			issueStateByIssueKey: Object.fromEntries(
+				Object.entries(currentState.issueStateByIssueKey ?? {}).map(([issueKey, state]) => [
+					issueKey,
+					previousStates[issueKey] ?? state,
+				]),
+			),
+		};
+	}
+
+	private async loadFirstResponses(
+		candidates: FirstResponseCandidate[],
+		syncTime: string,
+	): Promise<FirstResponseLoadResult> {
+		if (candidates.length === 0) {
+			return {notes: [], failureCount: 0, failureExample: ''};
+		}
+
+		const notes = new Array<NormalizedIssueNote>(candidates.length);
+		let nextIndex = 0;
+		let failureCount = 0;
+		let failureExample = '';
+		const worker = async () => {
+			while (nextIndex < candidates.length) {
+				const candidateIndex = nextIndex;
+				nextIndex += 1;
+				const candidate = candidates[candidateIndex];
+
+				try {
+					const firstResponseAt = await this.loader.loadFirstOtherPersonResponseAt(
+						candidate.repoName,
+						candidate.note.iid,
+						candidate.note.authorUsername,
+					);
+						notes[candidateIndex] = {
+							...candidate.note,
+							firstResponseAt: firstResponseAt || candidate.note.firstResponseAt,
+						firstResponseCheckedAt: syncTime,
+					};
+				} catch (error) {
+					failureCount += 1;
+					failureExample ||= `${buildIssueKey(candidate.note)} (${this.getErrorMessage(error)})`;
+					notes[candidateIndex] = candidate.note;
+				}
+			}
+		};
+
+		await Promise.all(Array.from(
+			{length: Math.min(SyncService.FIRST_RESPONSE_CONCURRENCY, candidates.length)},
+			() => worker(),
+		));
+
+		return {notes, failureCount, failureExample};
+	}
+
 	private normalizeIssue(
 		issue: Issue,
 		repoName: string,
@@ -393,9 +519,11 @@ export default class SyncService {
 			sourceRepo: repoName,
 			authorUsername,
 			authorName,
-			isInternalAuthor: internalAuthor.isInternalAuthor,
-			internalMatchedBy: internalAuthor.internalMatchedBy,
-			labels: this.normalizeLabels(issue.labels),
+				isInternalAuthor: internalAuthor.isInternalAuthor,
+				internalMatchedBy: internalAuthor.internalMatchedBy,
+				firstResponseAt: existingNote?.firstResponseAt ?? '',
+				firstResponseCheckedAt: existingNote?.firstResponseCheckedAt ?? '',
+				labels: this.normalizeLabels(issue.labels),
 			issueTypeRaw: issue.issue_type ?? '',
 			requestKind,
 			requestKindMatchedBy,

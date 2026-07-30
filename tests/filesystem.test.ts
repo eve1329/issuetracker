@@ -38,6 +38,26 @@ function makeSettings(overrides: Partial<GitlabIssuesSettings> = {}): GitlabIssu
 }
 
 describe('Filesystem', () => {
+	it('removes a retired report file only when it exists', async () => {
+		const existingFile = Object.assign(new TFile(), {
+			path: 'GitCode Issues/reports/issue-ledger.csv',
+			name: 'issue-ledger.csv',
+			basename: 'issue-ledger',
+			extension: 'csv',
+		});
+		const vault = {
+			getAbstractFileByPath: jest.fn().mockReturnValue(existingFile),
+			delete: jest.fn().mockResolvedValue(undefined),
+		} as any;
+
+		await new Filesystem(vault, makeSettings()).removeFileIfExists(existingFile.path);
+		await new Filesystem({...vault, getAbstractFileByPath: jest.fn().mockReturnValue(null)}, makeSettings())
+			.removeFileIfExists(existingFile.path);
+
+		expect(vault.delete).toHaveBeenCalledWith(existingFile);
+		expect(vault.delete).toHaveBeenCalledTimes(1);
+	});
+
 	it('reads issue note content from the latest vault file contents instead of stale cached text', async () => {
 		const noteFile = Object.assign(new TFile(), {
 			path: 'GitCode Issues/issues/CPF-KMP-CMP__repo-a__81.md',

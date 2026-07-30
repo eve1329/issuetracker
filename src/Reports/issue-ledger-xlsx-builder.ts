@@ -83,26 +83,31 @@ function buildWorkbookRelationshipsXml() {
 function buildStylesXml() {
 	return xmlDocument(`
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="3">
+  <fonts count="5">
     <font><sz val="11"/><color theme="1"/><name val="Arial"/></font>
     <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>
     <font><u/><sz val="11"/><color rgb="FF0563C1"/><name val="Arial"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>
+    <font><u/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>
   </fonts>
-  <fills count="3">
+  <fills count="4">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF7F1D1D"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>
     <border><left style="thin"><color rgb="FFD9E2F3"/></left><right style="thin"><color rgb="FFD9E2F3"/></right><top style="thin"><color rgb="FFD9E2F3"/></top><bottom style="thin"><color rgb="FFD9E2F3"/></bottom><diagonal/></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="4">
+  <cellXfs count="6">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`);
@@ -118,6 +123,8 @@ function buildWorksheetXml(rows: IssueLedgerRow[], hyperlinks: Array<{cellRef: s
 		.join('')}</row>`;
 	const dataRows = rows.map((row, index) => {
 		const rowNumber = index + 2;
+		const cellStyleIndex = row.newlyClosed ? 4 : 3;
+		const hyperlinkStyleIndex = row.newlyClosed ? 5 : 2;
 		const values = [
 			String(row.serial),
 			row.title,
@@ -137,7 +144,7 @@ function buildWorksheetXml(rows: IssueLedgerRow[], hyperlinks: Array<{cellRef: s
 			.map((value, columnIndex) => buildInlineStringCell(
 				toCellReference(columnIndex + 1, rowNumber),
 				value,
-				columnIndex === 2 && row.url.trim() ? 2 : 3,
+				columnIndex === 2 && row.url.trim() ? hyperlinkStyleIndex : cellStyleIndex,
 			))
 			.join('')}</row>`;
 	}).join('');

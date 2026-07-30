@@ -131,7 +131,7 @@ function buildInternalMemberIdentityReviewMarkdown(
 		`- 统计范围：${scope}，共 ${review.eligibleIssueCount} 条。`,
 		`- 标题命中内部编号或内部工作标记：${review.evidenceIssueCount} 条。`,
 		`- 待补全账号：**${review.candidates.length} 个 / ${candidateIssueCount} 条 Issue**。`,
-		'- 只有标题命中内部编号或内部工作标记、作者账号存在且不在已确认目录时，才进入待补全名单。协作者信息仅作为补充证据。',
+		'- 只有标题命中内部编号或内部工作标记、作者账号存在且不在已确认目录时，才进入待补全名单。已关闭 Issue 不进入首次台账，但会保留为内部身份判定证据。协作者信息仅作为补充证据。',
 		'',
 		'## 待补全账号',
 		'',

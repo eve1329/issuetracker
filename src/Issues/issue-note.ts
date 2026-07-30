@@ -17,6 +17,8 @@ export interface NormalizedIssueNote {
 	authorName: string;
 	isInternalAuthor: boolean;
 	internalMatchedBy: InternalMatchSource;
+	firstResponseAt: string;
+	firstResponseCheckedAt: string;
 	labels: string[];
 	issueTypeRaw: string;
 	requestKind: RequestKind;
@@ -42,6 +44,8 @@ export function buildIssueNoteMarkdown(issue: NormalizedIssueNote): string {
 		`authorName: ${quoteYamlString(issue.authorName)}`,
 		`isInternalAuthor: ${issue.isInternalAuthor}`,
 		`internalMatchedBy: ${quoteYamlString(issue.internalMatchedBy)}`,
+		`firstResponseAt: ${quoteYamlString(issue.firstResponseAt)}`,
+		`firstResponseCheckedAt: ${quoteYamlString(issue.firstResponseCheckedAt)}`,
 		renderLabels(issue.labels),
 		`issueTypeRaw: ${quoteYamlString(issue.issueTypeRaw)}`,
 		`requestKind: ${issue.requestKind}`,

@@ -162,6 +162,43 @@ describe('GitlabLoader', () => {
 		);
 	});
 
+	it('uses the repository comments endpoint for GitCode Issues', () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+
+		expect(gitlabLoader.getIssueCommentsUrl('docs', 16)).toBe(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/docs/issues/16/comments',
+		);
+	});
+
+	it('uses the GitLab project notes endpoint for Issue comments', () => {
+		mockSettings.gitlabUrl = 'https://gitlab.example.com';
+		mockSettings.apiBaseUrl = 'https://gitlab.example.com/api/v4';
+
+		expect(gitlabLoader.getIssueCommentsUrl('docs', 16)).toBe(
+			'https://gitlab.example.com/api/v4/projects/CPF-KMP-CMP%2Fdocs/issues/16/notes',
+		);
+	});
+
+	it('selects the first non-author, non-system Issue comment without persisting comment content', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockLoadAllPages.mockResolvedValueOnce([
+			{created_at: '2026-06-17T09:15:00+08:00', user: {login: 'Partner_A'}},
+			{created_at: '2026-06-17T09:30:00+08:00', author: {username: 'system'}, system: true},
+			{created_at: '2026-06-17T09:45:00+08:00', user: {login: 'reviewer_b'}},
+			{created_at: '2026-06-17T10:00:00+08:00', author: {username: 'reviewer_c'}},
+		]);
+
+		await expect(gitlabLoader.loadFirstOtherPersonResponseAt('docs', 16, 'partner_a')).resolves.toBe(
+			'2026-06-17T09:45:00+08:00',
+		);
+		expect(mockLoadAllPages).toHaveBeenCalledWith(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/docs/issues/16/comments',
+			mockSettings.gitlabToken,
+		);
+	});
+
 	it('loads repo issues with the GitHub repository endpoint when configured against GitHub', async () => {
 		mockSettings.gitlabUrl = 'https://github.com';
 		mockSettings.apiBaseUrl = 'https://api.github.com';

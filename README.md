@@ -14,11 +14,11 @@ The current implementation is verified against GitCode and GitLab-style issue AP
 - Sync issues from selected repositories on supported hosts, or from every repository under a configured organization or group.
 - Persist each issue as a normalized Obsidian note under the configured issues folder.
 - Mark authors as internal or external by combining the confirmed member directory, repository collaborator data, and a manual whitelist.
-- Treat authors as internal when titles match an `IR` / `SR` reference or a default workflow marker (`【fix】`, `【bug】`, `【门禁测试】`, `门禁测试`, `【release】`, `【next】`, `【需求】`), even when the account is not yet in the confirmed directory.
+- Treat authors as internal when titles match an `IR` / `SR` reference or a default workflow marker (`【fix】`, `【bug】`, `【门禁测试】`, `门禁测试`, `【release】`, `【next】`, `【需求】`), even when the account is not yet in the confirmed directory. Historical closed Issues do not receive first-time ledger rows, but their internal evidence identifies later Issues from the same account.
 - Generate a roster-gap Markdown report listing title-evidence accounts missing from the confirmed directory, including reasons and related Issues.
 - Classify issues into `bug`, `requirement`, or `unknown` using configurable prefix, keyword, and label rules.
 - Generate machine-friendly daily reports and AI-friendly daily briefs.
-- Generate a 13-column issue ledger as both raw-URL CSV and native-hyperlink XLSX. The XLSX links are directly clickable after Tencent Docs import.
+- Generate a 13-column native-hyperlink XLSX issue ledger. It records the first non-author, non-system comment timestamp and elapsed response time without storing comment text. A tracked Issue that changes from open to closed is shown with a dark row for that sync; retired CSV output is removed after a successful XLSX refresh.
 - Generate a separate Markdown reminder when tracked Issues close, retaining the current closed-Issue list for follow-up.
 - Persist sync metadata, degraded-sync warnings, and collaborator caches under the configured meta folder.
 
@@ -29,7 +29,6 @@ The current implementation is verified against GitCode and GitLab-style issue AP
 - `GitCode Issues/meta/issue-closure-state.json`
 - `GitCode Issues/meta/issue-ledger-state.json`
 - `GitCode Issues/meta/sync-state.json`
-- `GitCode Issues/reports/issue-ledger.csv`
 - `GitCode Issues/reports/issue-ledger.xlsx`
 - `GitCode Issues/reports/internal-member-identity-review.md`
 - `GitCode Issues/reports/issue-close-reminders.md`
@@ -130,11 +129,11 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 从指定的仓库同步 issue，或者同步某个组织 / group 下的全部仓库。
 - 将每条 issue 规范化后保存到配置的 issues 目录。
 - 结合内部成员目录、仓库协作者信息和手工白名单，把作者标记为内部或外部成员。
-- 当标题命中 `IR` / `SR` 内部编号，或默认内部工作标记 `【fix】`、`【bug】`、`【门禁测试】`、`门禁测试`、`【release】`、`【next】`、`【需求】` 时，即使作者账号尚未进入成员目录，也按内部人员处理。
+- 当标题命中 `IR` / `SR` 内部编号，或默认内部工作标记 `【fix】`、`【bug】`、`【门禁测试】`、`门禁测试`、`【release】`、`【next】`、`【需求】` 时，即使作者账号尚未进入成员目录，也按内部人员处理。历史关闭 Issue 不会首次写入台账，但其内部证据会用于识别同一账号后续的 Issue。
 - 自动生成“内部人员名单收集待补全报告”，单独列出命中内部标题证据但不在已确认成员目录中的账号、原因和关联 Issue。
 - 通过可配置的前缀、关键词和标签规则，把 issue 分类为 `bug`、`requirement` 或 `unknown`。
 - 生成便于机器处理的日报，以及适合 AI 消费的日报摘要。
-- 生成 13 列 issue 台账：CSV 保留原始 URL，XLSX 使用原生超链接，导入腾讯文档后可直接点击。
+- 生成 13 列 XLSX issue 台账，使用原生超链接，导入腾讯文档后可直接点击。“首次响应时间”取非 Issue 作者、非系统事件的第一条评论时间，只保留时间元数据，不保存评论正文；已追踪 Issue 从 open 变为 closed 的当次同步会以深色整行标记。Excel 写入成功后会清理已废弃的 CSV 台账。
 - 在已追踪的 issue 关闭时生成独立 Markdown 提醒，并保留当前关闭 issue 列表便于跟进。
 - 将同步元数据、降级同步告警和协作者缓存保存到配置的 meta 目录。
 
@@ -145,7 +144,6 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `GitCode Issues/meta/issue-closure-state.json`
 - `GitCode Issues/meta/issue-ledger-state.json`
 - `GitCode Issues/meta/sync-state.json`
-- `GitCode Issues/reports/issue-ledger.csv`
 - `GitCode Issues/reports/issue-ledger.xlsx`
 - `GitCode Issues/reports/internal-member-identity-review.md`
 - `GitCode Issues/reports/issue-close-reminders.md`

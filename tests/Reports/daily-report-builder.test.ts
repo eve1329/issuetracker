@@ -18,6 +18,8 @@ function makeIssue(partial: Partial<NormalizedIssueNote>): NormalizedIssueNote {
 		authorName: 'Partner A',
 		isInternalAuthor: false,
 		internalMatchedBy: 'none',
+		firstResponseAt: '',
+		firstResponseCheckedAt: '',
 		labels: [],
 		issueTypeRaw: 'issue',
 		requestKind: 'bug',
@@ -79,6 +81,37 @@ describe('buildDailyReport', () => {
 		expect(report.externalBugIssues).toHaveLength(1);
 		expect(report.externalRequirementIssues).toHaveLength(0);
 		expect(report.unknownIssues).toHaveLength(0);
+	});
+
+	it('uses a historical closed Issue as internal identity evidence for later daily counts', () => {
+		const report = buildDailyReport('2026-06-17', [
+			makeIssue({
+				iid: 16,
+				title: 'IR002: 历史内部工作项',
+				state: 'closed',
+				createdAt: '2026-05-25T20:05:46+08:00',
+				authorUsername: 'zhangjuncheng8',
+				authorName: 'Kyoma',
+				sourceRepo: 'docs',
+				projectPath: 'CPF-KMP-CMP/docs',
+			}),
+			makeIssue({
+				iid: 44,
+				title: '[BUG] 最新说明问题',
+				state: 'open',
+				createdAt: '2026-06-17T09:00:00+08:00',
+				authorUsername: 'zhangjuncheng8',
+				authorName: 'Kyoma',
+				requestKind: 'bug',
+				sourceRepo: 'docs',
+				projectPath: 'CPF-KMP-CMP/docs',
+			}),
+		]);
+
+		expect(report.newIssueCount).toBe(1);
+		expect(report.externalIssueCount).toBe(0);
+		expect(report.externalBugCount).toBe(0);
+		expect(report.topExternalAuthors).toEqual([]);
 	});
 
 	it('computes external counts and ranks external authors by frequency', () => {

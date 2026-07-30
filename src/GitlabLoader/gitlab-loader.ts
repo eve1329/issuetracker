@@ -2,10 +2,11 @@ import GitlabApi from "./gitlab-api";
 import {GitlabIssue} from "./issue";
 import {App} from "obsidian";
 import Filesystem from "../filesystem";
-import {GitCodeOrgRepository, Issue} from "./issue-types";
+import {GitCodeOrgRepository, Issue, IssueComment} from "./issue-types";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
 import {detectGitHost, getGitlabApiVersion} from "../SettingsTab/settings";
 import {logger} from "../utils/utils";
+import {findFirstOtherPersonResponseAt} from '../Issues/first-response';
 
 export default class GitlabLoader {
 
@@ -70,6 +71,20 @@ export default class GitlabLoader {
 		return `${baseUrl}?${encodeURI(filter)}`;
 	}
 
+	getIssueCommentsUrl(repoName: string, issueIid: number) {
+		const apiBaseUrl = this.getApiBaseUrl();
+		const host = this.getHost();
+		const encodedOrgName = encodeURIComponent(this.settings.orgName);
+		const encodedRepoName = encodeURIComponent(repoName);
+
+		if (host === 'gitlab' || (host === 'unknown' && this.getApiVersion() === 'v4')) {
+			const projectId = encodeURIComponent(`${this.settings.orgName}/${repoName}`);
+			return `${apiBaseUrl}/projects/${projectId}/issues/${issueIid}/notes`;
+		}
+
+		return `${apiBaseUrl}/repos/${encodedOrgName}/${encodedRepoName}/issues/${issueIid}/comments`;
+	}
+
 	private getRepoIssueFilter() {
 		let hasState = false;
 		const filterParameters = this.settings.issueFilter
@@ -130,6 +145,27 @@ export default class GitlabLoader {
 			this.getRepoIssuesUrl(repoName),
 			this.settings.gitlabToken,
 		);
+	}
+
+	async loadFirstOtherPersonResponseAt(
+		repoName: string,
+		issueIid: number,
+		issueAuthorUsername: string,
+	): Promise<string> {
+		const comments = await GitlabApi.loadAllPages<IssueComment>(
+			this.getIssueCommentsUrl(repoName, issueIid),
+			this.settings.gitlabToken,
+		);
+
+		return findFirstOtherPersonResponseAt(issueAuthorUsername, comments.map((comment) => ({
+			authorUsername: comment.author?.username
+				?? comment.author?.login
+				?? comment.user?.login
+				?? comment.user?.username
+				?? '',
+			createdAt: comment.created_at ?? '',
+			isSystem: Boolean(comment.system),
+		})));
 	}
 
 	async loadOrgRepos(): Promise<GitCodeOrgRepository[]> {

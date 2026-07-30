@@ -21,6 +21,8 @@ function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssu
 		authorName: 'Partner A',
 		isInternalAuthor: false,
 		internalMatchedBy: 'none',
+		firstResponseAt: '',
+		firstResponseCheckedAt: '',
 		labels: [],
 		issueTypeRaw: 'issue',
 		requestKind: 'bug',

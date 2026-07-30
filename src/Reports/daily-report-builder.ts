@@ -1,5 +1,6 @@
 import {NormalizedIssueNote} from "../Issues/issue-note";
 import {
+	buildInternalAuthorEvidenceIndex,
 	buildKnownInternalUsernameSet,
 	InternalIdentitySettings,
 	isIssueInternal,
@@ -53,6 +54,9 @@ export function buildDailyReport(
 ): DailyReport {
 	const sameDayIssues = issues.filter((issue) => issue.createdAt.startsWith(date));
 	const knownInternalUsernames = buildKnownInternalUsernameSet(settings);
+	for (const username of buildInternalAuthorEvidenceIndex(issues, settings).keys()) {
+		knownInternalUsernames.add(username);
+	}
 	const bugIssues = sameDayIssues.filter((issue) => issue.requestKind === 'bug');
 	const requirementIssues = sameDayIssues.filter((issue) => issue.requestKind === 'requirement');
 	const unknownIssues = sameDayIssues.filter((issue) => issue.requestKind === 'unknown');

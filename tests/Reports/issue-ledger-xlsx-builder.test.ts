@@ -17,6 +17,7 @@ function makeRow(overrides: Partial<IssueLedgerRow> = {}): IssueLedgerRow {
 		department: '',
 		firstResponseAt: '',
 		firstResponseDuration: '',
+		newlyClosed: false,
 		evidence: '未命中白名单或内部编号',
 		...overrides,
 	};
@@ -40,5 +41,14 @@ describe('buildIssueLedgerXlsx', () => {
 
 		expect(text).not.toContain('<hyperlink ref="C2"');
 		expect(text).toContain('<t></t>');
+	});
+
+	it('uses a dark high-contrast row style for an Issue that newly closed this sync', () => {
+		const text = new TextDecoder().decode(buildIssueLedgerXlsx([makeRow({newlyClosed: true})]));
+
+		expect(text).toContain('fgColor rgb="FF7F1D1D"');
+		expect(text).toContain('<c r="A2" s="4"');
+		expect(text).toContain('<c r="C2" s="5"');
+		expect(text).toContain('<color rgb="FFFFFFFF"/>');
 	});
 });
