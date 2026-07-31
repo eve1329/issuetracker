@@ -48,23 +48,15 @@ class SyncProgressNotice {
 		const percent = document.createElement('strong');
 		const progressBar = document.createElement('progress');
 
-		container.style.display = 'grid';
-		container.style.gap = '8px';
-		container.style.width = '280px';
-		container.style.maxWidth = '100%';
-		statusRow.style.display = 'flex';
-		statusRow.style.alignItems = 'center';
-		statusRow.style.gap = '12px';
-		status.style.flex = '1';
-		status.style.minWidth = '0';
-		status.style.overflowWrap = 'anywhere';
+		container.addClass('issuetracker-sync-progress');
+		statusRow.addClass('issuetracker-sync-progress__status-row');
+		status.addClass('issuetracker-sync-progress__status');
 		status.textContent = progress.message;
-		percent.style.flexShrink = '0';
+		percent.addClass('issuetracker-sync-progress__percent');
 		percent.textContent = `${progress.percent}%`;
 		progressBar.max = 100;
 		progressBar.value = progress.percent;
-		progressBar.style.width = '100%';
-		progressBar.style.height = '8px';
+		progressBar.addClass('issuetracker-sync-progress__bar');
 		progressBar.setAttribute('aria-label', 'IssueTracker 同步进度');
 
 		statusRow.append(status, percent);

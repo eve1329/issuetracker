@@ -46,6 +46,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 3. 把这些文件复制到你的 vault 插件目录 `.obsidian/plugins/issuetracker/`：
    - `manifest.json`
    - `main.js`
+   - `styles.css`
    - `versions.json`
 4. 在 Obsidian 里启用 `IssueTracker`。
 

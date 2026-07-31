@@ -2,6 +2,10 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.7 - 2026-07-31
+
+- Move the sync progress notice layout from static inline assignments into packaged CSS classes so it passes the Obsidian Community static-style validation.
+
 ## 0.2.6 - 2026-07-31
 
 - Notify about newly discovered external Issues with an Obsidian notice, using a durable silent baseline to avoid first-sync and retry duplicates.

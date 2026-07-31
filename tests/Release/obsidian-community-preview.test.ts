@@ -71,6 +71,24 @@ describe('Obsidian Community preview blockers', () => {
 		expect(filesystemSource).not.toMatch(/\.createFolder\s*\(/);
 	});
 
+	it('uses CSS classes instead of static DOM style assignments for sync progress', () => {
+		const mainSource = readWorkspaceFile('src/main.ts');
+		const styles = readWorkspaceFile('styles.css');
+		const progressClasses = [
+			'issuetracker-sync-progress',
+			'issuetracker-sync-progress__status-row',
+			'issuetracker-sync-progress__status',
+			'issuetracker-sync-progress__percent',
+			'issuetracker-sync-progress__bar',
+		];
+
+		expect(mainSource).not.toMatch(/\.style\./);
+		for (const className of progressClasses) {
+			expect(mainSource).toContain(`addClass('${className}')`);
+			expect(styles).toContain(`.${className}`);
+		}
+	});
+
 	it('keeps the package, manifest, and version metadata aligned', () => {
 		const packageJson = JSON.parse(readWorkspaceFile('package.json')) as {version: string};
 		const manifest = JSON.parse(readWorkspaceFile('manifest.json')) as {version: string; minAppVersion: string};
