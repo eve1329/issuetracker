@@ -5,6 +5,8 @@ import {GitlabIssuesSettingTab} from "./SettingsTab/settings-tab";
 import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
 import SyncService, {SyncProgress} from "./Sync/sync-service";
+import {sendFeishuNewExternalIssueNotification} from './Notifications/feishu-notifier';
+import {formatLocalNewExternalIssueNotification} from './Notifications/new-issue-notifications';
 import {logger} from "./utils/utils";
 
 class SyncProgressNotice {
@@ -184,11 +186,32 @@ export default class GitlabIssuesPlugin extends Plugin {
 	private fetchFromGitlab() {
 		const progressNotice = new SyncProgressNotice();
 		void new SyncService(this.app, this.settings, (progress) => progressNotice.update(progress)).run()
-			.then(() => progressNotice.finish())
+			.then(async (result) => {
+				progressNotice.finish();
+				await this.notifyNewExternalIssues(result.newExternalIssues);
+			})
 			.catch((error) => {
 				const message = error instanceof Error ? error.message : String(error);
 				logger(message);
 				progressNotice.fail(message);
 			});
+	}
+
+	private async notifyNewExternalIssues(newExternalIssues: Awaited<ReturnType<SyncService['run']>>['newExternalIssues']) {
+		if (newExternalIssues.length === 0) {
+			return;
+		}
+
+		if (this.settings.localNewExternalIssueNotifications) {
+			new Notice(formatLocalNewExternalIssueNotification(newExternalIssues), 10_000);
+		}
+
+		try {
+			await sendFeishuNewExternalIssueNotification(this.settings.feishuWebhookUrl, newExternalIssues);
+		} catch (error) {
+			const message = `飞书新增 Issue 通知发送失败：${error instanceof Error ? error.message : String(error)}`;
+			logger(message);
+			new Notice(message, 10_000);
+		}
 	}
 }

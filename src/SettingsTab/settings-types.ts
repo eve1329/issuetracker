@@ -35,6 +35,8 @@ export interface GitlabIssuesSettings {
 	showIcon: boolean;
 	purgeIssues: boolean;
 	refreshOnStartup: boolean;
+	localNewExternalIssueNotifications: boolean;
+	feishuWebhookUrl: string;
 	intervalOfRefresh: GitlabRefreshInterval;
 	gitlabApiUrl(): string;
 }
@@ -69,16 +71,17 @@ export interface SettingInput extends Setting {
 		| "metaFolder"
 		| "reportsFolder"
 		| "issueFilter"
+		| "feishuWebhookUrl"
 	>,
 	modifier?: 'normalizePath' | 'stringArray' | 'json';
-	inputType?: 'text' | 'textarea';
+	inputType?: 'text' | 'textarea' | 'password';
 }
 export interface DropdownInputs extends Setting {
 	value: keyof Pick<GitlabIssuesSettings, "gitlabIssuesLevel" | "intervalOfRefresh">
 	options: Record<string, string>
 }
 export interface SettingCheckboxInput extends Omit<Setting, "description"> {
-	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports' | 'syncAllOrgRepos'>
+	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports' | 'syncAllOrgRepos' | 'localNewExternalIssueNotifications'>
 }
 
 export interface SettingsTab {

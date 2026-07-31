@@ -14,6 +14,12 @@ import {buildIssueLedgerXlsx} from "../Reports/issue-ledger-xlsx-builder";
 import {buildIssueClosureNotice, IssueClosureState} from "../Reports/issue-closure-notice-builder";
 import {buildInternalMemberIdentityReview} from "../Reports/internal-member-identity-review-builder";
 import {buildIssueKey, isOnOrAfterStartMonth, normalizeStartMonth} from '../Issues/issue-scope';
+import {
+	buildIssueNotificationState,
+	findNewExternalIssues,
+	NewExternalIssue,
+	normalizeIssueNotificationState,
+} from '../Notifications/new-issue-notifications';
 import {logger} from "../utils/utils";
 
 export type SyncProgressPhase = 'starting' | 'members' | 'issues' | 'issue-files' | 'reports' | 'ledger' | 'closing' | 'complete';
@@ -27,6 +33,7 @@ export interface SyncProgress {
 export interface SyncRunResult {
 	syncStatus: 'success' | 'degraded';
 	ledgerWriteFailed: boolean;
+	newExternalIssues: NewExternalIssue[];
 }
 
 type LedgerWriteStage = 'prepare' | 'state' | 'xlsx' | 'final-state' | 'cleanup';
@@ -353,23 +360,60 @@ export default class SyncService {
 			repositorySyncStatus = 'degraded';
 		}
 
-		const syncStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded'
+		let syncStatus: SyncState['syncStatus'] = memberSyncStatus === 'degraded'
 			|| repositorySyncStatus === 'degraded'
 			? 'degraded'
 			: 'success';
-		const lastSuccessfulSyncAt = syncStatus === 'success'
-			? syncTime
-			: previousSyncState?.lastSuccessfulSyncAt ?? null;
+		let newExternalIssues: NewExternalIssue[] = [];
+		const notificationStatePath = `${this.settings.metaFolder}/issue-notification-state.json`;
+		let nextNotificationState: ReturnType<typeof buildIssueNotificationState> | null = null;
 
-		await this.fs.writeJson(`${this.settings.metaFolder}/sync-state.json`, {
-			syncStatus,
-			failedRepos,
-			lastSuccessfulSyncAt,
-			memberSyncStatus,
-			repositorySyncStatus,
-			warningMessages,
-			memberSyncProgress: internalMembers.syncProgress,
-		} as SyncState);
+		if (syncStatus === 'success') {
+			try {
+				const previousNotificationState = normalizeIssueNotificationState(
+					await this.fs.readJson<unknown>(notificationStatePath),
+				);
+				newExternalIssues = findNewExternalIssues(normalizedNotes, previousNotificationState);
+				nextNotificationState = buildIssueNotificationState(normalizedNotes, previousNotificationState);
+			} catch (error) {
+				syncStatus = 'degraded';
+				newExternalIssues = [];
+				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
+				warningMessages.push(message);
+				logger(message);
+			}
+		}
+
+		const writeSyncState = async () => {
+			const lastSuccessfulSyncAt = syncStatus === 'success'
+				? syncTime
+				: previousSyncState?.lastSuccessfulSyncAt ?? null;
+
+			await this.fs.writeJson(`${this.settings.metaFolder}/sync-state.json`, {
+				syncStatus,
+				failedRepos,
+				lastSuccessfulSyncAt,
+				memberSyncStatus,
+				repositorySyncStatus,
+				warningMessages,
+				memberSyncProgress: internalMembers.syncProgress,
+			} as SyncState);
+		};
+
+		// The final sync marker must be durable before an Issue is marked as notified.
+		await writeSyncState();
+		if (syncStatus === 'success' && nextNotificationState) {
+			try {
+				await this.fs.writeJson(notificationStatePath, nextNotificationState);
+			} catch (error) {
+				syncStatus = 'degraded';
+				newExternalIssues = [];
+				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
+				warningMessages.push(message);
+				logger(message);
+				await writeSyncState();
+			}
+		}
 
 		this.reportProgress(
 			'complete',
@@ -381,7 +425,7 @@ export default class SyncService {
 					: '同步完成，但部分任务有异常',
 		);
 
-		return {syncStatus, ledgerWriteFailed};
+		return {syncStatus, ledgerWriteFailed, newExternalIssues};
 	}
 
 	private reportProgress(phase: SyncProgressPhase, percent: number, message: string) {

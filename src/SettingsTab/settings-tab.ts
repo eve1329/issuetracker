@@ -99,12 +99,18 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 				return;
 			}
 
-			uiSetting.addText(text => text
-				.setPlaceholder(setting.placeholder ?? "")
-				.setValue(handleSetValue())
-				.onChange(async (value) => {
-					await saveValue(value);
-				}));
+			uiSetting.addText(text => {
+				if (setting.inputType === 'password') {
+					text.inputEl.type = 'password';
+				}
+
+				return text
+					.setPlaceholder(setting.placeholder ?? "")
+					.setValue(handleSetValue())
+					.onChange(async (value) => {
+						await saveValue(value);
+					});
+			});
 		});
 
 		dropdowns.forEach((dropwdown) => {

@@ -308,7 +308,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-17-brief.md',
 			expect.stringContaining('# Issue Daily Brief - 2026-06-17'),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'success',
@@ -344,7 +344,95 @@ describe('SyncService', () => {
 			percent: 100,
 			message: '同步完成，Excel 台账已刷新',
 		});
-		expect(result).toEqual({syncStatus: 'success', ledgerWriteFailed: false});
+		expect(result).toEqual({syncStatus: 'success', ledgerWriteFailed: false, newExternalIssues: []});
+	});
+
+	it('establishes a silent baseline, then returns only newly discovered external Issues', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({iid: 78})]);
+
+		const initialResult = await new SyncService(mockApp, settings).run();
+
+		expect(initialResult.newExternalIssues).toEqual([]);
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/issue-notification-state.json',
+			{seenIssueKeys: ['CPF-KMP-CMP/repo-a#78']},
+		);
+
+		mockWriteJson.mockClear();
+		mockReadJson.mockImplementation(async (path: string) => (
+			path === 'GitCode Issues/meta/issue-notification-state.json'
+				? {seenIssueKeys: ['CPF-KMP-CMP/repo-a#78']}
+				: null
+		));
+		mockLoadRepoIssues.mockResolvedValueOnce([
+			makeIssue({
+				iid: 79,
+				title: '外部新增 Issue',
+				web_url: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/79',
+				references: {short: '#79', relative: '#79', full: 'CPF-KMP-CMP/repo-a#79'},
+			}),
+			makeIssue({
+				iid: 80,
+				title: '内部新增 Issue',
+				web_url: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/80',
+				references: {short: '#80', relative: '#80', full: 'CPF-KMP-CMP/repo-a#80'},
+				author: {
+					avatar_url: '',
+					id: 2,
+					locked: false,
+					name: 'Developer A',
+					state: 'active',
+					username: 'dev_a',
+					web_url: '',
+				},
+			}),
+		]);
+
+		const nextResult = await new SyncService(mockApp, settings).run();
+
+		expect(nextResult).toEqual(expect.objectContaining({
+			syncStatus: 'success',
+			newExternalIssues: [expect.objectContaining({
+				issueKey: 'CPF-KMP-CMP/repo-a#79',
+				title: '外部新增 Issue',
+			})],
+		}));
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/issue-notification-state.json',
+			{seenIssueKeys: [
+				'CPF-KMP-CMP/repo-a#78',
+				'CPF-KMP-CMP/repo-a#79',
+				'CPF-KMP-CMP/repo-a#80',
+			]},
+		);
+	});
+
+	it('does not return notifications when their durable state cannot be written', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		mockReadJson.mockImplementation(async (path: string) => (
+			path === 'GitCode Issues/meta/issue-notification-state.json'
+				? {seenIssueKeys: []}
+				: null
+		));
+		mockWriteJson.mockImplementation(async (path: string) => {
+			if (path === 'GitCode Issues/meta/issue-notification-state.json') {
+				throw new Error('notification state unavailable');
+			}
+		});
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue()]);
+
+		const result = await new SyncService(mockApp, settings).run();
+
+		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: false, newExternalIssues: []});
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to persist issue notification state'),
+				]),
+			}),
+		);
 	});
 
 	it('reports a visible Excel ledger failure after the write fails', async () => {
@@ -361,7 +449,7 @@ describe('SyncService', () => {
 			percent: 100,
 			message: '同步完成，但 Excel 台账刷新失败',
 		});
-		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: true});
+		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: true, newExternalIssues: []});
 	});
 
 	it('persists the first other-person response metadata without changing Issue write order', async () => {
@@ -459,8 +547,8 @@ describe('SyncService', () => {
 				firstResponseCheckedAt: '2026-06-17T11:00:00.000Z',
 			}),
 		]);
-		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: false});
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(result).toEqual({syncStatus: 'degraded', ledgerWriteFailed: false, newExternalIssues: []});
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				warningMessages: expect.arrayContaining([
@@ -509,7 +597,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-17-brief.md',
 			expect.any(String),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -564,7 +652,7 @@ describe('SyncService', () => {
 		expect(mockWriteIssueNotes).toHaveBeenCalledWith([
 			expect.objectContaining({isInternalAuthor: true, internalMatchedBy: 'org'}),
 		]);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -625,7 +713,7 @@ describe('SyncService', () => {
 				internalMatchedBy: 'repo',
 			}),
 		]);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'success',
@@ -876,7 +964,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily-brief/2026-06-22-brief.md',
 			expect.stringContaining('# Issue Daily Brief - 2026-06-22'),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'success',
@@ -968,7 +1056,7 @@ describe('SyncService', () => {
 			expect.stringContaining('# Issue Daily Brief - 2026-06-22'),
 		);
 		expect(mockUpsertTextFile).toHaveBeenCalledTimes(9);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'success',
@@ -1040,7 +1128,7 @@ describe('SyncService', () => {
 				expect.objectContaining({sourceRepo: 'repo-b', isInternalAuthor: true, internalMatchedBy: 'repo'}),
 			]),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1113,7 +1201,7 @@ describe('SyncService', () => {
 
 		expect(mockReadJson).toHaveBeenCalledWith('GitCode Issues/meta/internal-members.json');
 		expect(mockLoadInternalMemberIndex).toHaveBeenCalledWith(['repo-a', 'repo-b'], cachedIndex);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				memberSyncProgress: {
@@ -1144,7 +1232,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1174,7 +1262,7 @@ describe('SyncService', () => {
 
 		await new SyncService(mockApp, settings).run();
 
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1220,7 +1308,7 @@ describe('SyncService', () => {
 		await new SyncService(mockApp, settings).run();
 
 		expect(mockWriteIssueNotes).toHaveBeenCalled();
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1275,7 +1363,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/daily/2026-06-17.md',
 			expect.stringContaining('- repo-a #78: [BUG] 登录失败'),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1539,7 +1627,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/issue-ledger.xlsx',
 			expect.any(Uint8Array),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1620,7 +1708,7 @@ describe('SyncService', () => {
 			'GitCode Issues/reports/internal-member-identity-review.md',
 			expect.stringContaining('# 内部人员名单收集待补全报告'),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',
@@ -1649,7 +1737,7 @@ describe('SyncService', () => {
 				serialByIssueKey: {'CPF-KMP-CMP/repo-a#78': 1},
 			}),
 		);
-		expect(mockWriteJson).toHaveBeenLastCalledWith(
+		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
 			expect.objectContaining({
 				syncStatus: 'degraded',

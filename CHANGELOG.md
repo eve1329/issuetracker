@@ -2,6 +2,12 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.6 - 2026-07-31
+
+- Notify about newly discovered external Issues with an Obsidian notice, using a durable silent baseline to avoid first-sync and retry duplicates.
+- Add an optional Feishu group-bot webhook that sends linked Issue summaries directly from the running Obsidian plugin.
+- Keep notification state unchanged when a sync is degraded or its state file cannot be persisted.
+
 ## 0.2.5 - 2026-07-30
 
 - Replace the CSV ledger with the native-hyperlink XLSX ledger; a successful Excel refresh removes the retired CSV output.

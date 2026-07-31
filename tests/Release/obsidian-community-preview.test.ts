@@ -70,4 +70,13 @@ describe('Obsidian Community preview blockers', () => {
 		expect(mainSource).not.toMatch(/\bregisterInterval\s*\(/);
 		expect(filesystemSource).not.toMatch(/\.createFolder\s*\(/);
 	});
+
+	it('keeps the package, manifest, and version metadata aligned', () => {
+		const packageJson = JSON.parse(readWorkspaceFile('package.json')) as {version: string};
+		const manifest = JSON.parse(readWorkspaceFile('manifest.json')) as {version: string; minAppVersion: string};
+		const versions = JSON.parse(readWorkspaceFile('versions.json')) as Record<string, string>;
+
+		expect(manifest.version).toBe(packageJson.version);
+		expect(versions[manifest.version]).toBe(manifest.minAppVersion);
+	});
 });

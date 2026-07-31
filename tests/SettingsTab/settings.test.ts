@@ -85,6 +85,8 @@ describe('DEFAULT_SETTINGS', () => {
 			showIcon: false,
 			purgeIssues: false,
 			refreshOnStartup: true,
+			localNewExternalIssueNotifications: true,
+			feishuWebhookUrl: '',
 			intervalOfRefresh: '15',
 		};
 
@@ -143,6 +145,16 @@ describe('DEFAULT_SETTINGS', () => {
 			'页面上移高度不足': 'bug',
 			'遮挡': 'bug',
 		});
+	});
+
+	it('normalizes notification settings without exposing a webhook default', () => {
+		expect(normalizeSettings({
+			localNewExternalIssueNotifications: false,
+			feishuWebhookUrl: '  https://open.feishu.cn/hook/test  ',
+		})).toEqual(expect.objectContaining({
+			localNewExternalIssueNotifications: false,
+			feishuWebhookUrl: 'https://open.feishu.cn/hook/test',
+		}));
 	});
 });
 
@@ -375,6 +387,13 @@ describe('settings', () => {
 				placeholder: '',
 				value: 'issueFilter',
 			},
+			{
+				title: 'Feishu Bot Webhook',
+				description: 'Optional group-bot webhook for newly discovered external Issues. Leave empty to keep notifications local.',
+				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+				value: 'feishuWebhookUrl',
+				inputType: 'password',
+			},
 		];
 
 		expect(settings.settingInputs).toEqual(expectedSettingInputs);
@@ -431,10 +450,14 @@ describe('settings', () => {
 					title: 'Show the manual sync icon in the left ribbon?',
 					value: 'showIcon',
 				},
-				{
-					title: 'Refresh issues on startup?',
-					value: 'refreshOnStartup',
-				},
+			{
+				title: 'Refresh issues on startup?',
+				value: 'refreshOnStartup',
+			},
+			{
+				title: 'Show local notifications for new external Issues?',
+				value: 'localNewExternalIssueNotifications',
+			},
 				{
 					title: 'Generate daily reports?',
 					value: 'generateDailyReports',

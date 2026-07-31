@@ -155,6 +155,8 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	showIcon: false,
 	purgeIssues: false,
 	refreshOnStartup: true,
+	localNewExternalIssueNotifications: true,
+	feishuWebhookUrl: '',
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
 		return resolveGitlabApiBaseUrl(this.gitlabUrl, this.apiBaseUrl);
@@ -171,6 +173,12 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 	const rawClassificationRules = rawData.classificationRules;
 	const internalMemberDirectory = normalizeInternalMemberDirectory(rawData.internalMemberDirectory);
 	const issueLedgerStartMonth = normalizeIssueLedgerStartMonth(rawData.issueLedgerStartMonth);
+	const localNewExternalIssueNotifications = typeof rawData.localNewExternalIssueNotifications === 'boolean'
+		? rawData.localNewExternalIssueNotifications
+		: DEFAULT_SETTINGS.localNewExternalIssueNotifications;
+	const feishuWebhookUrl = typeof rawData.feishuWebhookUrl === 'string'
+		? rawData.feishuWebhookUrl.trim()
+		: '';
 	const classificationRules = {
 		titlePrefixes: {
 			...DEFAULT_SETTINGS.classificationRules.titlePrefixes,
@@ -191,6 +199,8 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 		internalMemberDirectory,
 		issueLedgerStartMonth,
 		classificationRules,
+		localNewExternalIssueNotifications,
+		feishuWebhookUrl,
 		issueFilter: canonicalFilter,
 		filter: canonicalFilter,
 	};
@@ -331,6 +341,13 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				description: 'Raw query string appended to issue list endpoints for the configured host.',
 				placeholder: '',
 				value: 'issueFilter'
+			},
+			{
+				title: 'Feishu Bot Webhook',
+				description: 'Optional group-bot webhook for newly discovered external Issues. Leave empty to keep notifications local.',
+				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+				value: 'feishuWebhookUrl',
+				inputType: 'password',
 			}
 		],
 		dropdowns: [{
@@ -357,6 +374,10 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			{
 				title: 'Refresh issues on startup?',
 				value: 'refreshOnStartup'
+			},
+			{
+				title: 'Show local notifications for new external Issues?',
+				value: 'localNewExternalIssueNotifications'
 			},
 			{
 				title: 'Generate daily reports?',
@@ -495,6 +516,13 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				description: '附加到当前主机 issue 列表接口后的原始查询字符串。',
 				placeholder: '',
 				value: 'issueFilter'
+			},
+			{
+				title: '飞书群机器人 Webhook',
+				description: '可选。插件发现新增外部 Issue 后会发送到此群机器人；留空则只在本机提醒。',
+				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
+				value: 'feishuWebhookUrl',
+				inputType: 'password',
 			}
 		],
 		dropdowns: [{
@@ -521,6 +549,10 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			{
 				title: '启动时自动刷新 issues？',
 				value: 'refreshOnStartup'
+			},
+			{
+				title: '新增外部 Issue 时本机提醒？',
+				value: 'localNewExternalIssueNotifications'
 			},
 			{
 				title: '生成日报？',
