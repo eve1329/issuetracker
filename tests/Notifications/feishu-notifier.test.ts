@@ -1,7 +1,7 @@
 import * as ObsidianModule from 'obsidian';
 import {
-	buildFeishuNewExternalIssuePayload,
-	sendFeishuNewExternalIssueNotification,
+	buildFeishuNewIssuePayload,
+	sendFeishuNewIssueNotification,
 } from '../../src/Notifications/feishu-notifier';
 
 const issue = {
@@ -12,15 +12,16 @@ const issue = {
 	authorName: 'Partner A',
 	authorUsername: 'partner_a',
 	webUrl: 'https://gitcode.com/repo-a/issues/2',
+	authorType: 'external' as const,
 };
 
 describe('Feishu notifier', () => {
 	afterEach(() => jest.restoreAllMocks());
 
 	it('builds a linked Feishu post payload', () => {
-		const payload = buildFeishuNewExternalIssuePayload([issue]);
+		const payload = buildFeishuNewIssuePayload([issue]);
 		expect(payload.msg_type).toBe('post');
-		expect(payload.content.post.zh_cn.title).toContain('1 个新增外部 Issue');
+		expect(payload.content.post.zh_cn.title).toContain('1 个新增 Issue（内部 0 / 外部 1）');
 		expect(payload.content.post.zh_cn.content).toEqual(expect.arrayContaining([
 			expect.arrayContaining([
 				expect.objectContaining({tag: 'a', href: issue.webUrl}),
@@ -37,7 +38,7 @@ describe('Feishu notifier', () => {
 			text: '',
 		});
 
-		await sendFeishuNewExternalIssueNotification(' https://example.test/hook ', [issue]);
+		await sendFeishuNewIssueNotification(' https://example.test/hook ', [issue]);
 		expect(request).toHaveBeenCalledWith(expect.objectContaining({
 			url: 'https://example.test/hook',
 			method: 'POST',
@@ -53,7 +54,18 @@ describe('Feishu notifier', () => {
 			json: {code: 19001},
 			text: '',
 		});
-		await expect(sendFeishuNewExternalIssueNotification('https://example.test/hook', [issue]))
+		await expect(sendFeishuNewIssueNotification('https://example.test/hook', [issue]))
 			.rejects.toThrow('Feishu webhook rejected');
+	});
+
+	it('labels internal Issue authors in the post content and summary', () => {
+		const payload = buildFeishuNewIssuePayload([
+			{...issue, authorType: 'internal', title: '内部新增问题'},
+			issue,
+		]);
+
+		expect(payload.content.post.zh_cn.title).toContain('内部 1 / 外部 1');
+		expect(JSON.stringify(payload.content.post.zh_cn.content)).toContain('[内部 Issue]');
+		expect(JSON.stringify(payload.content.post.zh_cn.content)).toContain('[外部 Issue]');
 	});
 });

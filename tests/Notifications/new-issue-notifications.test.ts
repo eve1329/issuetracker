@@ -1,8 +1,8 @@
 import {NormalizedIssueNote} from '../../src/Issues/issue-note';
 import {
 	buildIssueNotificationState,
-	findNewExternalIssues,
-	formatLocalNewExternalIssueNotification,
+	findNewIssues,
+	formatLocalNewIssueNotification,
 	normalizeIssueNotificationState,
 } from '../../src/Notifications/new-issue-notifications';
 
@@ -36,13 +36,13 @@ function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssu
 
 describe('new issue notifications', () => {
 	it('treats the first valid state as a silent baseline', () => {
-		expect(findNewExternalIssues([makeIssue()], null)).toEqual([]);
+		expect(findNewIssues([makeIssue()], null)).toEqual([]);
 		expect(buildIssueNotificationState([makeIssue()], null)).toEqual({
 			seenIssueKeys: ['CPF-KMP-CMP/repo-a#1'],
 		});
 	});
 
-	it('returns only unseen external issues while retaining previous keys', () => {
+	it('returns unseen internal and external Issues while retaining previous keys', () => {
 		const previousState = {seenIssueKeys: ['CPF-KMP-CMP/repo-a#1']};
 		const currentIssues = [
 			makeIssue({iid: 1}),
@@ -61,8 +61,17 @@ describe('new issue notifications', () => {
 			}),
 		];
 
-		expect(findNewExternalIssues(currentIssues, previousState)).toEqual([
-			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#2', title: '外部新增问题'}),
+		expect(findNewIssues(currentIssues, previousState)).toEqual([
+			expect.objectContaining({
+				issueKey: 'CPF-KMP-CMP/repo-a#2',
+				title: '外部新增问题',
+				authorType: 'external',
+			}),
+			expect.objectContaining({
+				issueKey: 'CPF-KMP-CMP/repo-a#3',
+				title: '内部新增问题',
+				authorType: 'internal',
+			}),
 		]);
 		expect(buildIssueNotificationState(currentIssues, previousState)).toEqual({
 			seenIssueKeys: [
@@ -88,7 +97,9 @@ describe('new issue notifications', () => {
 			authorName: 'Partner A',
 			authorUsername: 'partner_a',
 			webUrl: 'https://gitcode.com/repo-a/issues/2',
+			authorType: 'external' as const,
 		};
-		expect(formatLocalNewExternalIssueNotification([issue])).toContain('repo-a#2');
+		expect(formatLocalNewIssueNotification([issue])).toContain('新增外部 Issue');
+		expect(formatLocalNewIssueNotification([issue])).toContain('repo-a#2');
 	});
 });

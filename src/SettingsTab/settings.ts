@@ -155,7 +155,7 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	showIcon: false,
 	purgeIssues: false,
 	refreshOnStartup: true,
-	localNewExternalIssueNotifications: true,
+	localNewIssueNotifications: true,
 	feishuWebhookUrl: '',
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
@@ -163,9 +163,16 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	}
 };
 
-export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): GitlabIssuesSettings {
+type PersistedSettings = Partial<GitlabIssuesSettings> & {
+	localNewExternalIssueNotifications?: unknown;
+};
+
+export function normalizeSettings(loadedData?: PersistedSettings): GitlabIssuesSettings {
 	const rawData = loadedData ?? {};
-	const mergedSettings = Object.assign({}, DEFAULT_SETTINGS, rawData);
+	const legacyLocalNewExternalIssueNotifications = rawData.localNewExternalIssueNotifications;
+	const canonicalData = {...rawData};
+	delete canonicalData.localNewExternalIssueNotifications;
+	const mergedSettings = Object.assign({}, DEFAULT_SETTINGS, canonicalData);
 	const hasExplicitIssueFilter = Object.prototype.hasOwnProperty.call(rawData, 'issueFilter');
 	const canonicalFilter = hasExplicitIssueFilter
 		? rawData.issueFilter ?? ''
@@ -173,9 +180,11 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 	const rawClassificationRules = rawData.classificationRules;
 	const internalMemberDirectory = normalizeInternalMemberDirectory(rawData.internalMemberDirectory);
 	const issueLedgerStartMonth = normalizeIssueLedgerStartMonth(rawData.issueLedgerStartMonth);
-	const localNewExternalIssueNotifications = typeof rawData.localNewExternalIssueNotifications === 'boolean'
-		? rawData.localNewExternalIssueNotifications
-		: DEFAULT_SETTINGS.localNewExternalIssueNotifications;
+	const localNewIssueNotifications = typeof rawData.localNewIssueNotifications === 'boolean'
+		? rawData.localNewIssueNotifications
+		: typeof legacyLocalNewExternalIssueNotifications === 'boolean'
+			? legacyLocalNewExternalIssueNotifications
+			: DEFAULT_SETTINGS.localNewIssueNotifications;
 	const feishuWebhookUrl = typeof rawData.feishuWebhookUrl === 'string'
 		? rawData.feishuWebhookUrl.trim()
 		: '';
@@ -199,7 +208,7 @@ export function normalizeSettings(loadedData?: Partial<GitlabIssuesSettings>): G
 		internalMemberDirectory,
 		issueLedgerStartMonth,
 		classificationRules,
-		localNewExternalIssueNotifications,
+		localNewIssueNotifications,
 		feishuWebhookUrl,
 		issueFilter: canonicalFilter,
 		filter: canonicalFilter,
@@ -344,7 +353,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: 'Feishu Bot Webhook',
-				description: 'Optional group-bot webhook for newly discovered external Issues. Leave empty to keep notifications local.',
+				description: 'Optional group-bot webhook for newly discovered Issues. Messages distinguish internal and external authors. Leave empty to keep notifications local.',
 				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
 				value: 'feishuWebhookUrl',
 				inputType: 'password',
@@ -376,8 +385,8 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'refreshOnStartup'
 			},
 			{
-				title: 'Show local notifications for new external Issues?',
-				value: 'localNewExternalIssueNotifications'
+				title: 'Show local notifications for new Issues?',
+				value: 'localNewIssueNotifications'
 			},
 			{
 				title: 'Generate daily reports?',
@@ -519,7 +528,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: '飞书群机器人 Webhook',
-				description: '可选。插件发现新增外部 Issue 后会发送到此群机器人；留空则只在本机提醒。',
+				description: '可选。插件发现新增 Issue 后会发送到此群机器人，并标明内部或外部作者；留空则只在本机提醒。',
 				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
 				value: 'feishuWebhookUrl',
 				inputType: 'password',
@@ -551,8 +560,8 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'refreshOnStartup'
 			},
 			{
-				title: '新增外部 Issue 时本机提醒？',
-				value: 'localNewExternalIssueNotifications'
+				title: '新增 Issue 时本机提醒？',
+				value: 'localNewIssueNotifications'
 			},
 			{
 				title: '生成日报？',

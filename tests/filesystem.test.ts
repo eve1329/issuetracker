@@ -58,6 +58,26 @@ describe('Filesystem', () => {
 		expect(vault.delete).toHaveBeenCalledTimes(1);
 	});
 
+	it('updates the file created by a concurrent sync instead of reporting it as a write failure', async () => {
+		const concurrentFile = Object.assign(new TFile(), {
+			path: 'GitCode Issues/meta/sync-state.json',
+			name: 'sync-state.json',
+			basename: 'sync-state',
+			extension: 'json',
+		});
+		const vault = {
+			getAbstractFileByPath: jest.fn()
+				.mockReturnValueOnce(null)
+				.mockReturnValue(concurrentFile),
+			create: jest.fn().mockRejectedValue(new Error('File already exists.')),
+			modify: jest.fn().mockResolvedValue(undefined),
+		} as any;
+
+		await new Filesystem(vault, makeSettings()).upsertTextFile(concurrentFile.path, 'updated state');
+
+		expect(vault.modify).toHaveBeenCalledWith(concurrentFile, 'updated state');
+	});
+
 	it('reads issue note content from the latest vault file contents instead of stale cached text', async () => {
 		const noteFile = Object.assign(new TFile(), {
 			path: 'GitCode Issues/issues/CPF-KMP-CMP__repo-a__81.md',

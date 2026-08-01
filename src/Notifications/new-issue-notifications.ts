@@ -5,7 +5,9 @@ export interface IssueNotificationState {
 	seenIssueKeys: string[];
 }
 
-export interface NewExternalIssue {
+export type IssueAuthorType = 'internal' | 'external';
+
+export interface NewIssue {
 	issueKey: string;
 	sourceRepo: string;
 	iid: number;
@@ -13,6 +15,7 @@ export interface NewExternalIssue {
 	authorName: string;
 	authorUsername: string;
 	webUrl: string;
+	authorType: IssueAuthorType;
 }
 
 export function normalizeIssueNotificationState(value: unknown): IssueNotificationState | null {
@@ -47,17 +50,17 @@ export function buildIssueNotificationState(
 	return {seenIssueKeys: Array.from(seenIssueKeys).sort()};
 }
 
-export function findNewExternalIssues(
+export function findNewIssues(
 	issues: NormalizedIssueNote[],
 	previousState: IssueNotificationState | null,
-): NewExternalIssue[] {
+): NewIssue[] {
 	if (!previousState) {
 		return [];
 	}
 
 	const seenIssueKeys = new Set(previousState.seenIssueKeys);
 	return deduplicateIssues(issues)
-		.filter((issue) => !seenIssueKeys.has(buildIssueKey(issue)) && !issue.isInternalAuthor)
+		.filter((issue) => !seenIssueKeys.has(buildIssueKey(issue)))
 		.map((issue) => ({
 			issueKey: buildIssueKey(issue),
 			sourceRepo: issue.sourceRepo,
@@ -66,18 +69,28 @@ export function findNewExternalIssues(
 			authorName: issue.authorName,
 			authorUsername: issue.authorUsername,
 			webUrl: issue.webUrl,
+			authorType: issue.isInternalAuthor ? 'internal' : 'external',
 		}));
 }
 
-export function formatLocalNewExternalIssueNotification(issues: NewExternalIssue[]): string {
+export function formatIssueAuthorType(issue: Pick<NewIssue, 'authorType'>) {
+	return issue.authorType === 'internal' ? '内部' : '外部';
+}
+
+export function formatNewIssueCounts(issues: NewIssue[]) {
+	const internalCount = issues.filter((issue) => issue.authorType === 'internal').length;
+	return `内部 ${internalCount} / 外部 ${issues.length - internalCount}`;
+}
+
+export function formatLocalNewIssueNotification(issues: NewIssue[]): string {
 	if (issues.length === 1) {
 		const issue = issues[0];
-		return `新增外部 Issue：${issue.sourceRepo}#${issue.iid} ${issue.title}`;
+		return `新增${formatIssueAuthorType(issue)} Issue：${issue.sourceRepo}#${issue.iid} ${issue.title}`;
 	}
 
 	const preview = issues.slice(0, 3)
-		.map((issue) => `${issue.sourceRepo}#${issue.iid} ${issue.title}`)
+		.map((issue) => `[${formatIssueAuthorType(issue)}] ${issue.sourceRepo}#${issue.iid} ${issue.title}`)
 		.join('\n');
 	const remaining = issues.length > 3 ? `\n另有 ${issues.length - 3} 条。` : '';
-	return `新增 ${issues.length} 个外部 Issue：\n${preview}${remaining}`;
+	return `新增 ${issues.length} 个 Issue（${formatNewIssueCounts(issues)}）：\n${preview}${remaining}`;
 }

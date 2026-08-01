@@ -85,7 +85,7 @@ describe('DEFAULT_SETTINGS', () => {
 			showIcon: false,
 			purgeIssues: false,
 			refreshOnStartup: true,
-			localNewExternalIssueNotifications: true,
+			localNewIssueNotifications: true,
 			feishuWebhookUrl: '',
 			intervalOfRefresh: '15',
 		};
@@ -147,14 +147,17 @@ describe('DEFAULT_SETTINGS', () => {
 		});
 	});
 
-	it('normalizes notification settings without exposing a webhook default', () => {
-		expect(normalizeSettings({
+	it('migrates the legacy external-only notification toggle without exposing a webhook default', () => {
+		const normalized = normalizeSettings({
 			localNewExternalIssueNotifications: false,
 			feishuWebhookUrl: '  https://open.feishu.cn/hook/test  ',
-		})).toEqual(expect.objectContaining({
-			localNewExternalIssueNotifications: false,
+		});
+
+		expect(normalized).toEqual(expect.objectContaining({
+			localNewIssueNotifications: false,
 			feishuWebhookUrl: 'https://open.feishu.cn/hook/test',
 		}));
+		expect(normalized).not.toHaveProperty('localNewExternalIssueNotifications');
 	});
 });
 
@@ -389,7 +392,7 @@ describe('settings', () => {
 			},
 			{
 				title: 'Feishu Bot Webhook',
-				description: 'Optional group-bot webhook for newly discovered external Issues. Leave empty to keep notifications local.',
+				description: 'Optional group-bot webhook for newly discovered Issues. Messages distinguish internal and external authors. Leave empty to keep notifications local.',
 				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
 				value: 'feishuWebhookUrl',
 				inputType: 'password',
@@ -455,8 +458,8 @@ describe('settings', () => {
 				value: 'refreshOnStartup',
 			},
 			{
-				title: 'Show local notifications for new external Issues?',
-				value: 'localNewExternalIssueNotifications',
+				title: 'Show local notifications for new Issues?',
+				value: 'localNewIssueNotifications',
 			},
 				{
 					title: 'Generate daily reports?',

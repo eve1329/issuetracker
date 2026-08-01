@@ -70,8 +70,8 @@ Open the `IssueTracker` settings tab and configure:
 - `Classification Rules`: JSON rules for mapping titles or labels into `bug` / `requirement`
 - `Issues Folder`, `Meta Folder`, `Reports Folder`: output locations inside the vault
 - `Generate daily reports`: write daily summaries and AI briefs after sync
-- `Show local notifications for new external Issues?`: show an Obsidian notice for newly discovered Issues whose authors are not classified as internal; enabled by default
-- `Feishu Bot Webhook`: optional Feishu group-bot URL. The plugin posts the same new external Issue batch directly from Obsidian; leave empty for local notices only
+- `Show local notifications for new Issues?`: show an Obsidian notice for newly discovered internal and external Issues; each Issue is labelled with its author type; enabled by default
+- `Feishu Bot Webhook`: optional Feishu group-bot URL. The plugin posts newly discovered internal and external Issues directly from Obsidian, with the author type on every item; leave empty for local notices only
 
 The settings page still keeps a legacy API-scope compatibility section from the original importer code path. The primary workflow in this fork is the repository sync path described above.
 
@@ -81,7 +81,7 @@ The settings page still keeps a legacy API-scope compatibility section from the 
 - Or run the command palette action `Sync IssueTracker`.
 - If `Refresh issues on startup` is enabled, the plugin waits 30 seconds after launch before the first automatic sync.
 - Automatic refresh runs every 15 minutes by default.
-- The first successful sync silently records the current Issue set. Later successful syncs notify only for newly discovered external Issues; failed or degraded syncs do not advance the notification baseline.
+- The first successful sync silently records the current Issue set. Later successful syncs notify for newly discovered internal and external Issues; failed or degraded syncs do not advance the notification baseline. Overlapping triggers share one in-progress sync so they cannot duplicate progress notices or compete to write the same generated files.
 
 ### Generated Data
 
@@ -191,8 +191,8 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `Classification Rules`：把标题或标签映射到 `bug` / `requirement` 的 JSON 规则
 - `Issues Folder`、`Meta Folder`、`Reports Folder`：vault 内的输出目录
 - `Generate daily reports`：同步完成后生成日报和 AI 摘要
-- `新增外部 Issue 时本机提醒？`：当同步发现作者不是内部成员的新 Issue 时显示 Obsidian 提示，默认开启
-- `飞书群机器人 Webhook`：可选的飞书群机器人地址。插件会从 Obsidian 直接发送本次新增外部 Issue；留空则只保留本机提示
+- `新增 Issue 时本机提醒？`：默认开启；对新增的内部和外部 Issue 显示 Obsidian 提示，并标明类型
+- `飞书群机器人 Webhook`：可选的飞书群机器人地址。插件会从 Obsidian 直接发送本次新增的内部和外部 Issue，并在每条中标明类型；留空则只保留本机提示
 
 设置页里仍保留了原始导入器路径中的旧 API scope 兼容区块。这个分支当前的主要工作流是上面这套仓库同步模型。
 
@@ -202,7 +202,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 或者在命令面板里执行 `Sync IssueTracker`。
 - 如果启用了 `Refresh issues on startup`，插件会在 Obsidian 启动 30 秒后执行第一次自动同步。
 - 默认情况下，自动刷新每 15 分钟执行一次。
-- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步只提醒新增的外部 Issue。失败或降级同步不会推进通知基线。
+- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步会提醒新增的内部和外部 Issue，并标明类型。失败或降级同步不会推进通知基线。重叠的同步触发会复用同一次运行，避免重复进度条和对同一生成文件的竞争写入。
 
 ### 生成的数据
 

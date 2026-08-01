@@ -1,14 +1,14 @@
 import {requestUrl} from 'obsidian';
-import {NewExternalIssue} from './new-issue-notifications';
+import {formatIssueAuthorType, formatNewIssueCounts, NewIssue} from './new-issue-notifications';
 
 const MAX_ISSUES_PER_MESSAGE = 10;
 
-export function buildFeishuNewExternalIssuePayload(issues: NewExternalIssue[]) {
+export function buildFeishuNewIssuePayload(issues: NewIssue[]) {
 	const visibleIssues = issues.slice(0, MAX_ISSUES_PER_MESSAGE);
 	const content = visibleIssues.map((issue) => ([
 		{
 			tag: 'text',
-			text: `${issue.sourceRepo}#${issue.iid} ${issue.title}\n作者：${issue.authorName || issue.authorUsername}`,
+			text: `[${formatIssueAuthorType(issue)} Issue] ${issue.sourceRepo}#${issue.iid} ${issue.title}\n作者：${issue.authorName || issue.authorUsername}`,
 		},
 		{
 			tag: 'a',
@@ -18,7 +18,8 @@ export function buildFeishuNewExternalIssuePayload(issues: NewExternalIssue[]) {
 	]));
 
 	if (issues.length > visibleIssues.length) {
-		content.push([{tag: 'text', text: `另有 ${issues.length - visibleIssues.length} 个新增外部 Issue。`}]);
+		const hiddenIssues = issues.slice(visibleIssues.length);
+		content.push([{tag: 'text', text: `另有 ${hiddenIssues.length} 个新增 Issue（${formatNewIssueCounts(hiddenIssues)}）。`}]);
 	}
 
 	return {
@@ -26,7 +27,7 @@ export function buildFeishuNewExternalIssuePayload(issues: NewExternalIssue[]) {
 		content: {
 			post: {
 				zh_cn: {
-					title: `IssueTracker：${issues.length} 个新增外部 Issue`,
+					title: `IssueTracker：${issues.length} 个新增 Issue（${formatNewIssueCounts(issues)}）`,
 					content,
 				},
 			},
@@ -34,9 +35,9 @@ export function buildFeishuNewExternalIssuePayload(issues: NewExternalIssue[]) {
 	};
 }
 
-export async function sendFeishuNewExternalIssueNotification(
+export async function sendFeishuNewIssueNotification(
 	webhookUrl: string,
-	issues: NewExternalIssue[],
+	issues: NewIssue[],
 ): Promise<void> {
 	const url = webhookUrl.trim();
 	if (!url || issues.length === 0) {
@@ -48,7 +49,7 @@ export async function sendFeishuNewExternalIssueNotification(
 		method: 'POST',
 		contentType: 'application/json',
 		headers: {'Content-Type': 'application/json'},
-		body: JSON.stringify(buildFeishuNewExternalIssuePayload(issues)),
+		body: JSON.stringify(buildFeishuNewIssuePayload(issues)),
 		throw: false,
 	});
 

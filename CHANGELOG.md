@@ -2,6 +2,12 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.8 - 2026-08-01
+
+- Prevent overlapping startup, interval, ribbon, and command sync triggers from creating duplicate progress notices or racing to write the same generated file.
+- Treat a concurrent file-creation collision as an update when the expected file has already appeared.
+- Notify about newly discovered internal and external Issues, identify the author type in local and Feishu notifications, and migrate the prior local-notification preference without changing its saved value.
+
 ## 0.2.7 - 2026-07-31
 
 - Move the sync progress notice layout from static inline assignments into packaged CSS classes so it passes the Obsidian Community static-style validation.

@@ -5,8 +5,9 @@ import {GitlabIssuesSettingTab} from "./SettingsTab/settings-tab";
 import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
 import SyncService, {SyncProgress} from "./Sync/sync-service";
-import {sendFeishuNewExternalIssueNotification} from './Notifications/feishu-notifier';
-import {formatLocalNewExternalIssueNotification} from './Notifications/new-issue-notifications';
+import SingleFlight from './Sync/single-flight';
+import {sendFeishuNewIssueNotification} from './Notifications/feishu-notifier';
+import {formatLocalNewIssueNotification} from './Notifications/new-issue-notifications';
 import {logger} from "./utils/utils";
 
 class SyncProgressNotice {
@@ -86,6 +87,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 	startupTimeout: number | null = null;
 	automaticRefresh: number | null = null;
 	iconAdded = false;
+	private readonly syncFlight = new SingleFlight<void>();
 
 	async onload() {
 		logger('Starting plugin');
@@ -95,7 +97,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 
 
 		if (this.settings.gitlabToken) {
-			this.createOutputFolder();
+			await this.createOutputFolder();
 			this.addIconToLeftRibbon();
 			this.addCommandToPalette();
 			this.refreshIssuesAtStartup();
@@ -111,7 +113,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 		if (this.settings.intervalOfRefresh !== "off") {
 			const intervalMinutes = parseInt(this.settings.intervalOfRefresh);
 			const intervalId = window.setInterval(() => {
-				this.fetchFromGitlab();
+				void this.fetchFromGitlab();
 			}, intervalMinutes * 60 * 1000);
 
 			this.register(() => window.clearInterval(intervalId));
@@ -137,7 +139,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 			if (!this.iconAdded) {
 				addIcon("issue-tracker", issueTrackerIcon);
 				this.addRibbonIcon('issue-tracker', 'Sync IssueTracker', (evt: MouseEvent) => {
-					this.fetchFromGitlab();
+					void this.fetchFromGitlab();
 				});
 				this.iconAdded = true;
 			}
@@ -149,7 +151,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 			id: 'sync-issue-tracker',
 			name: 'Sync IssueTracker',
 			callback: () => {
-				this.fetchFromGitlab();
+				void this.fetchFromGitlab();
 			}
 		});
 	}
@@ -162,7 +164,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 		}
 		if(this.settings.refreshOnStartup) {
 			const timeoutId = window.setTimeout(() => {
-				this.fetchFromGitlab();
+				void this.fetchFromGitlab();
 			}, 30 * 1000);
 
 			this.register(() => window.clearTimeout(timeoutId));
@@ -170,36 +172,37 @@ export default class GitlabIssuesPlugin extends Plugin {
 		}
 	}
 
-	private createOutputFolder() {
+	private createOutputFolder(): Promise<void> {
 		const fs = new Filesystem(this.app.vault, this.settings);
-		fs.createOutputDirectory();
+		return fs.createOutputDirectory();
 	}
 
 	private fetchFromGitlab() {
-		const progressNotice = new SyncProgressNotice();
-		void new SyncService(this.app, this.settings, (progress) => progressNotice.update(progress)).run()
-			.then(async (result) => {
+		return this.syncFlight.run(async () => {
+			const progressNotice = new SyncProgressNotice();
+			try {
+				const result = await new SyncService(this.app, this.settings, (progress) => progressNotice.update(progress)).run();
 				progressNotice.finish();
-				await this.notifyNewExternalIssues(result.newExternalIssues);
-			})
-			.catch((error) => {
+				await this.notifyNewIssues(result.newIssues);
+			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				logger(message);
 				progressNotice.fail(message);
-			});
+			}
+		});
 	}
 
-	private async notifyNewExternalIssues(newExternalIssues: Awaited<ReturnType<SyncService['run']>>['newExternalIssues']) {
-		if (newExternalIssues.length === 0) {
+	private async notifyNewIssues(newIssues: Awaited<ReturnType<SyncService['run']>>['newIssues']) {
+		if (newIssues.length === 0) {
 			return;
 		}
 
-		if (this.settings.localNewExternalIssueNotifications) {
-			new Notice(formatLocalNewExternalIssueNotification(newExternalIssues), 10_000);
+		if (this.settings.localNewIssueNotifications) {
+			new Notice(formatLocalNewIssueNotification(newIssues), 10_000);
 		}
 
 		try {
-			await sendFeishuNewExternalIssueNotification(this.settings.feishuWebhookUrl, newExternalIssues);
+			await sendFeishuNewIssueNotification(this.settings.feishuWebhookUrl, newIssues);
 		} catch (error) {
 			const message = `飞书新增 Issue 通知发送失败：${error instanceof Error ? error.message : String(error)}`;
 			logger(message);

@@ -66,6 +66,8 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `Classification Rules`：把标题或标签映射到 `bug` / `requirement` 的 JSON 规则
 - `Issues Folder`、`Meta Folder`、`Reports Folder`：vault 内的输出目录
 - `Generate daily reports`：同步完成后生成日报和 AI 摘要
+- `新增 Issue 时本机提醒？`：默认开启；对新增的内部和外部 Issue 显示本机提醒，并标明类型
+- `飞书群机器人 Webhook`：可选。插件会直接从 Obsidian 向群机器人发送新增内部和外部 Issue，并在每条中标明类型；留空则只在本机提醒
 
 设置页里仍保留了原始导入器路径中的旧 API scope 兼容区块。这个分支当前的主要工作流是上面这套仓库同步模型。
 
@@ -75,6 +77,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 或者在命令面板里执行 `Sync IssueTracker`。
 - 如果启用了 `Refresh issues on startup`，插件会在 Obsidian 启动 30 秒后执行第一次自动同步。
 - 默认情况下，自动刷新每 15 分钟执行一次。
+- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步会提醒新增的内部和外部 Issue。失败或降级同步不会推进通知基线。重叠的同步触发会复用同一次运行，避免重复进度条和对同一生成文件的竞争写入。
 
 ## 生成的数据
 

@@ -35,7 +35,7 @@ export interface GitlabIssuesSettings {
 	showIcon: boolean;
 	purgeIssues: boolean;
 	refreshOnStartup: boolean;
-	localNewExternalIssueNotifications: boolean;
+	localNewIssueNotifications: boolean;
 	feishuWebhookUrl: string;
 	intervalOfRefresh: GitlabRefreshInterval;
 	gitlabApiUrl(): string;
@@ -81,7 +81,7 @@ export interface DropdownInputs extends Setting {
 	options: Record<string, string>
 }
 export interface SettingCheckboxInput extends Omit<Setting, "description"> {
-	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports' | 'syncAllOrgRepos' | 'localNewExternalIssueNotifications'>
+	value: keyof Pick<GitlabIssuesSettings, "refreshOnStartup"| "purgeIssues"| 'showIcon' | 'generateDailyReports' | 'syncAllOrgRepos' | 'localNewIssueNotifications'>
 }
 
 export interface SettingsTab {

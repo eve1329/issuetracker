@@ -16,8 +16,8 @@ import {buildInternalMemberIdentityReview} from "../Reports/internal-member-iden
 import {buildIssueKey, isOnOrAfterStartMonth, normalizeStartMonth} from '../Issues/issue-scope';
 import {
 	buildIssueNotificationState,
-	findNewExternalIssues,
-	NewExternalIssue,
+	findNewIssues,
+	NewIssue,
 	normalizeIssueNotificationState,
 } from '../Notifications/new-issue-notifications';
 import {logger} from "../utils/utils";
@@ -33,7 +33,7 @@ export interface SyncProgress {
 export interface SyncRunResult {
 	syncStatus: 'success' | 'degraded';
 	ledgerWriteFailed: boolean;
-	newExternalIssues: NewExternalIssue[];
+	newIssues: NewIssue[];
 }
 
 type LedgerWriteStage = 'prepare' | 'state' | 'xlsx' | 'final-state' | 'cleanup';
@@ -364,7 +364,7 @@ export default class SyncService {
 			|| repositorySyncStatus === 'degraded'
 			? 'degraded'
 			: 'success';
-		let newExternalIssues: NewExternalIssue[] = [];
+		let newIssues: NewIssue[] = [];
 		const notificationStatePath = `${this.settings.metaFolder}/issue-notification-state.json`;
 		let nextNotificationState: ReturnType<typeof buildIssueNotificationState> | null = null;
 
@@ -373,11 +373,11 @@ export default class SyncService {
 				const previousNotificationState = normalizeIssueNotificationState(
 					await this.fs.readJson<unknown>(notificationStatePath),
 				);
-				newExternalIssues = findNewExternalIssues(normalizedNotes, previousNotificationState);
+				newIssues = findNewIssues(normalizedNotes, previousNotificationState);
 				nextNotificationState = buildIssueNotificationState(normalizedNotes, previousNotificationState);
 			} catch (error) {
 				syncStatus = 'degraded';
-				newExternalIssues = [];
+				newIssues = [];
 				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
 				warningMessages.push(message);
 				logger(message);
@@ -407,7 +407,7 @@ export default class SyncService {
 				await this.fs.writeJson(notificationStatePath, nextNotificationState);
 			} catch (error) {
 				syncStatus = 'degraded';
-				newExternalIssues = [];
+				newIssues = [];
 				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
 				warningMessages.push(message);
 				logger(message);
@@ -425,7 +425,7 @@ export default class SyncService {
 					: '同步完成，但部分任务有异常',
 		);
 
-		return {syncStatus, ledgerWriteFailed, newExternalIssues};
+		return {syncStatus, ledgerWriteFailed, newIssues};
 	}
 
 	private reportProgress(phase: SyncProgressPhase, percent: number, message: string) {

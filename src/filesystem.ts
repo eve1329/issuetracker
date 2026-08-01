@@ -16,9 +16,8 @@ export default class Filesystem {
 		this.settings = settings;
 	}
 
-	public createOutputDirectory() {
-		void this.ensureFolders([this.settings.outputDir])
-			.catch(() => logger('Could not create output directory'));
+	public async createOutputDirectory() {
+		await this.ensureFolders([this.settings.outputDir]);
 	}
 
 	public async ensureFolders(paths: string[]) {
@@ -39,7 +38,16 @@ export default class Filesystem {
 			return;
 		}
 
-		await this.vault.create(path, content);
+		try {
+			await this.vault.create(path, content);
+		} catch (error) {
+			const concurrentFile = this.vault.getAbstractFileByPath(path);
+			if (concurrentFile instanceof TFile && this.isAlreadyExistsError(error)) {
+				await this.vault.modify(concurrentFile, content);
+				return;
+			}
+			throw error;
+		}
 	}
 
 	public async writeBinary(path: string, data: Uint8Array) {
@@ -207,6 +215,11 @@ export default class Filesystem {
 				throw error;
 			}
 		}
+	}
+
+	private isAlreadyExistsError(error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		return /(?:file|folder) already exists|eexist/i.test(message);
 	}
 
 	private expandFolderPath(path: string) {
