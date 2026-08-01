@@ -2,6 +2,10 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.10 - 2026-08-01
+
+- Stabilize the same-day Feishu delivery-reconciliation coverage across CI runner time zones.
+
 ## 0.2.9 - 2026-08-01
 
 - Record each successful Feishu webhook delivery by Issue key, timestamp, and author type; keep failed or unrecorded deliveries pending for retry on the next successful sync.

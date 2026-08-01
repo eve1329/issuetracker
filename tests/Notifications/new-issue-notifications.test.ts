@@ -122,7 +122,7 @@ describe('new issue notifications', () => {
 		});
 	});
 
-	it('identifies only same-day internal Issues for automatic delivery reconciliation', () => {
+	it('identifies only same-day internal Issues for automatic delivery reconciliation in every runner time zone', () => {
 		const previousState = {
 			seenIssueKeys: [
 				'CPF-KMP-CMP/repo-a#1',
@@ -131,10 +131,12 @@ describe('new issue notifications', () => {
 			],
 		};
 		const candidates = findSameDayInternalFeishuBackfillIssues([
-			makeIssue({iid: 1, isInternalAuthor: true, createdAt: '2026-08-01T00:00:00+08:00'}),
-			makeIssue({iid: 2, isInternalAuthor: false, createdAt: '2026-08-01T00:00:00+08:00'}),
-			makeIssue({iid: 3, isInternalAuthor: true, createdAt: '2026-07-31T23:59:59+08:00'}),
-		], previousState, '2026-08-01T12:00:00+08:00');
+			// The matching timestamp is the same instant as the reconciliation time.
+			// The stale candidate is two days older, so both expectations are timezone-invariant.
+			makeIssue({iid: 1, isInternalAuthor: true, createdAt: '2026-08-01T12:00:00.000Z'}),
+			makeIssue({iid: 2, isInternalAuthor: false, createdAt: '2026-08-01T12:00:00.000Z'}),
+			makeIssue({iid: 3, isInternalAuthor: true, createdAt: '2026-07-30T12:00:00.000Z'}),
+		], previousState, '2026-08-01T12:00:00.000Z');
 
 		expect(candidates).toHaveLength(1);
 		expect(candidates[0]).toEqual(expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#1', authorType: 'internal'}));
