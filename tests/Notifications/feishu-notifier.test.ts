@@ -2,6 +2,7 @@ import * as ObsidianModule from 'obsidian';
 import {
 	buildFeishuNewIssuePayload,
 	sendFeishuNewIssueNotification,
+	splitFeishuNewIssueBatches,
 } from '../../src/Notifications/feishu-notifier';
 
 const issue = {
@@ -9,6 +10,7 @@ const issue = {
 	sourceRepo: 'repo-a',
 	iid: 2,
 	title: '外部新增问题',
+	createdAt: '2026-08-01T08:00:00+08:00',
 	authorName: 'Partner A',
 	authorUsername: 'partner_a',
 	webUrl: 'https://gitcode.com/repo-a/issues/2',
@@ -67,5 +69,15 @@ describe('Feishu notifier', () => {
 		expect(payload.content.post.zh_cn.title).toContain('内部 1 / 外部 1');
 		expect(JSON.stringify(payload.content.post.zh_cn.content)).toContain('[内部 Issue]');
 		expect(JSON.stringify(payload.content.post.zh_cn.content)).toContain('[外部 Issue]');
+	});
+
+	it('splits delivery into batches whose individual Issue keys can be recorded after each webhook success', () => {
+		const issues = Array.from({length: 11}, (_, index) => ({
+			...issue,
+			issueKey: `repo-a#${index + 1}`,
+			iid: index + 1,
+		}));
+
+		expect(splitFeishuNewIssueBatches(issues).map((batch) => batch.length)).toEqual([10, 1]);
 	});
 });

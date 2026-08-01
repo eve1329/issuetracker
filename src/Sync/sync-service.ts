@@ -16,9 +16,12 @@ import {buildInternalMemberIdentityReview} from "../Reports/internal-member-iden
 import {buildIssueKey, isOnOrAfterStartMonth, normalizeStartMonth} from '../Issues/issue-scope';
 import {
 	buildIssueNotificationState,
+	findSameDayInternalFeishuBackfillIssues,
 	findNewIssues,
+	findPendingFeishuIssues,
 	NewIssue,
 	normalizeIssueNotificationState,
+	queueFeishuIssueDeliveries,
 } from '../Notifications/new-issue-notifications';
 import {logger} from "../utils/utils";
 
@@ -34,6 +37,8 @@ export interface SyncRunResult {
 	syncStatus: 'success' | 'degraded';
 	ledgerWriteFailed: boolean;
 	newIssues: NewIssue[];
+	pendingFeishuIssues: NewIssue[];
+	sameDayInternalFeishuBackfillIssues: NewIssue[];
 }
 
 type LedgerWriteStage = 'prepare' | 'state' | 'xlsx' | 'final-state' | 'cleanup';
@@ -365,6 +370,8 @@ export default class SyncService {
 			? 'degraded'
 			: 'success';
 		let newIssues: NewIssue[] = [];
+		let pendingFeishuIssues: NewIssue[] = [];
+		let sameDayInternalFeishuBackfillIssues: NewIssue[] = [];
 		const notificationStatePath = `${this.settings.metaFolder}/issue-notification-state.json`;
 		let nextNotificationState: ReturnType<typeof buildIssueNotificationState> | null = null;
 
@@ -375,9 +382,24 @@ export default class SyncService {
 				);
 				newIssues = findNewIssues(normalizedNotes, previousNotificationState);
 				nextNotificationState = buildIssueNotificationState(normalizedNotes, previousNotificationState);
+				if (this.settings.feishuWebhookUrl.trim()) {
+					const shouldCheckSameDayInternalBackfill = Boolean(previousNotificationState)
+						&& !previousNotificationState?.feishuDelivery?.sameDayInternalBackfillCheckedAt;
+					sameDayInternalFeishuBackfillIssues = shouldCheckSameDayInternalBackfill
+						? findSameDayInternalFeishuBackfillIssues(normalizedNotes, previousNotificationState, syncTime)
+						: [];
+					nextNotificationState = queueFeishuIssueDeliveries(
+						nextNotificationState,
+						[...newIssues, ...sameDayInternalFeishuBackfillIssues],
+						shouldCheckSameDayInternalBackfill ? syncTime : undefined,
+					);
+					pendingFeishuIssues = findPendingFeishuIssues(nextNotificationState);
+				}
 			} catch (error) {
 				syncStatus = 'degraded';
 				newIssues = [];
+				pendingFeishuIssues = [];
+				sameDayInternalFeishuBackfillIssues = [];
 				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
 				warningMessages.push(message);
 				logger(message);
@@ -408,6 +430,8 @@ export default class SyncService {
 			} catch (error) {
 				syncStatus = 'degraded';
 				newIssues = [];
+				pendingFeishuIssues = [];
+				sameDayInternalFeishuBackfillIssues = [];
 				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
 				warningMessages.push(message);
 				logger(message);
@@ -425,7 +449,7 @@ export default class SyncService {
 					: '同步完成，但部分任务有异常',
 		);
 
-		return {syncStatus, ledgerWriteFailed, newIssues};
+		return {syncStatus, ledgerWriteFailed, newIssues, pendingFeishuIssues, sameDayInternalFeishuBackfillIssues};
 	}
 
 	private reportProgress(phase: SyncProgressPhase, percent: number, message: string) {

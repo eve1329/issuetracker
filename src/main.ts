@@ -6,8 +6,12 @@ import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
 import SyncService, {SyncProgress} from "./Sync/sync-service";
 import SingleFlight from './Sync/single-flight';
-import {sendFeishuNewIssueNotification} from './Notifications/feishu-notifier';
-import {formatLocalNewIssueNotification} from './Notifications/new-issue-notifications';
+import {sendFeishuNewIssueNotification, splitFeishuNewIssueBatches} from './Notifications/feishu-notifier';
+import {
+	formatLocalNewIssueNotification,
+	markFeishuIssuesDelivered,
+	normalizeIssueNotificationState,
+} from './Notifications/new-issue-notifications';
 import {logger} from "./utils/utils";
 
 class SyncProgressNotice {
@@ -183,7 +187,7 @@ export default class GitlabIssuesPlugin extends Plugin {
 			try {
 				const result = await new SyncService(this.app, this.settings, (progress) => progressNotice.update(progress)).run();
 				progressNotice.finish();
-				await this.notifyNewIssues(result.newIssues);
+				await this.notifyNewIssues(result);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				logger(message);
@@ -192,21 +196,37 @@ export default class GitlabIssuesPlugin extends Plugin {
 		});
 	}
 
-	private async notifyNewIssues(newIssues: Awaited<ReturnType<SyncService['run']>>['newIssues']) {
-		if (newIssues.length === 0) {
+	private async notifyNewIssues(result: Awaited<ReturnType<SyncService['run']>>) {
+		if (result.newIssues.length > 0 && this.settings.localNewIssueNotifications) {
+			new Notice(formatLocalNewIssueNotification(result.newIssues), 10_000);
+		}
+
+		if (result.pendingFeishuIssues.length === 0) {
 			return;
 		}
 
-		if (this.settings.localNewIssueNotifications) {
-			new Notice(formatLocalNewIssueNotification(newIssues), 10_000);
-		}
-
 		try {
-			await sendFeishuNewIssueNotification(this.settings.feishuWebhookUrl, newIssues);
+			for (const batch of splitFeishuNewIssueBatches(result.pendingFeishuIssues)) {
+				await sendFeishuNewIssueNotification(this.settings.feishuWebhookUrl, batch);
+				await this.markFeishuIssuesDelivered(batch);
+			}
+			if (result.sameDayInternalFeishuBackfillIssues.length > 0) {
+				new Notice(`飞书已补发 ${result.sameDayInternalFeishuBackfillIssues.length} 条当天内部 Issue。`, 10_000);
+			}
 		} catch (error) {
-			const message = `飞书新增 Issue 通知发送失败：${error instanceof Error ? error.message : String(error)}`;
+			const message = `飞书 Issue 投递或投递记录保存失败：${error instanceof Error ? error.message : String(error)}`;
 			logger(message);
 			new Notice(message, 10_000);
 		}
+	}
+
+	private async markFeishuIssuesDelivered(issues: Awaited<ReturnType<SyncService['run']>>['pendingFeishuIssues']) {
+		const fs = new Filesystem(this.app.vault, this.settings);
+		const statePath = `${this.settings.metaFolder}/issue-notification-state.json`;
+		const currentState = normalizeIssueNotificationState(await fs.readJson<unknown>(statePath));
+		if (!currentState) {
+			throw new Error('无法读取飞书投递状态。');
+		}
+		await fs.writeJson(statePath, markFeishuIssuesDelivered(currentState, issues, new Date().toISOString()));
 	}
 }

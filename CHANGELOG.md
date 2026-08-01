@@ -2,6 +2,12 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.9 - 2026-08-01
+
+- Record each successful Feishu webhook delivery by Issue key, timestamp, and author type; keep failed or unrecorded deliveries pending for retry on the next successful sync.
+- Split large Feishu deliveries into durable batches, recording each successful batch before sending the next one.
+- Directly backfill same-day internal Issues that were already synchronized before delivery tracking existed, without replaying historical internal Issues.
+
 ## 0.2.8 - 2026-08-01
 
 - Prevent overlapping startup, interval, ribbon, and command sync triggers from creating duplicate progress notices or racing to write the same generated file.

@@ -1,9 +1,13 @@
 import {NormalizedIssueNote} from '../../src/Issues/issue-note';
 import {
 	buildIssueNotificationState,
+	findSameDayInternalFeishuBackfillIssues,
 	findNewIssues,
+	findPendingFeishuIssues,
 	formatLocalNewIssueNotification,
+	markFeishuIssuesDelivered,
 	normalizeIssueNotificationState,
+	queueFeishuIssueDeliveries,
 } from '../../src/Notifications/new-issue-notifications';
 
 function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssueNote {
@@ -94,6 +98,7 @@ describe('new issue notifications', () => {
 			sourceRepo: 'repo-a',
 			iid: 2,
 			title: '外部新增问题',
+			createdAt: '2026-08-01T08:00:00+08:00',
 			authorName: 'Partner A',
 			authorUsername: 'partner_a',
 			webUrl: 'https://gitcode.com/repo-a/issues/2',
@@ -101,5 +106,37 @@ describe('new issue notifications', () => {
 		};
 		expect(formatLocalNewIssueNotification([issue])).toContain('新增外部 Issue');
 		expect(formatLocalNewIssueNotification([issue])).toContain('repo-a#2');
+	});
+
+	it('keeps an Issue pending until the Feishu webhook success is written to the delivery log', () => {
+		const issue = findNewIssues([makeIssue({iid: 2})], {seenIssueKeys: ['CPF-KMP-CMP/repo-a#1']})[0];
+		const queued = queueFeishuIssueDeliveries({seenIssueKeys: ['CPF-KMP-CMP/repo-a#1', 'CPF-KMP-CMP/repo-a#2']}, [issue]);
+
+		expect(findPendingFeishuIssues(queued)).toEqual([issue]);
+		expect(queued.feishuDelivery?.deliveries).toEqual({});
+
+		const delivered = markFeishuIssuesDelivered(queued, [issue], '2026-08-01T08:01:00.000Z');
+		expect(findPendingFeishuIssues(delivered)).toEqual([]);
+		expect(delivered.feishuDelivery?.deliveries).toEqual({
+			'CPF-KMP-CMP/repo-a#2': {deliveredAt: '2026-08-01T08:01:00.000Z', authorType: 'external'},
+		});
+	});
+
+	it('identifies only same-day internal Issues for automatic delivery reconciliation', () => {
+		const previousState = {
+			seenIssueKeys: [
+				'CPF-KMP-CMP/repo-a#1',
+				'CPF-KMP-CMP/repo-a#2',
+				'CPF-KMP-CMP/repo-a#3',
+			],
+		};
+		const candidates = findSameDayInternalFeishuBackfillIssues([
+			makeIssue({iid: 1, isInternalAuthor: true, createdAt: '2026-08-01T00:00:00+08:00'}),
+			makeIssue({iid: 2, isInternalAuthor: false, createdAt: '2026-08-01T00:00:00+08:00'}),
+			makeIssue({iid: 3, isInternalAuthor: true, createdAt: '2026-07-31T23:59:59+08:00'}),
+		], previousState, '2026-08-01T12:00:00+08:00');
+
+		expect(candidates).toHaveLength(1);
+		expect(candidates[0]).toEqual(expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#1', authorType: 'internal'}));
 	});
 });

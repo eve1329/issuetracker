@@ -1,7 +1,15 @@
 import {requestUrl} from 'obsidian';
 import {formatIssueAuthorType, formatNewIssueCounts, NewIssue} from './new-issue-notifications';
 
-const MAX_ISSUES_PER_MESSAGE = 10;
+export const MAX_ISSUES_PER_MESSAGE = 10;
+
+export function splitFeishuNewIssueBatches(issues: NewIssue[]): NewIssue[][] {
+	const batches: NewIssue[][] = [];
+	for (let index = 0; index < issues.length; index += MAX_ISSUES_PER_MESSAGE) {
+		batches.push(issues.slice(index, index + MAX_ISSUES_PER_MESSAGE));
+	}
+	return batches;
+}
 
 export function buildFeishuNewIssuePayload(issues: NewIssue[]) {
 	const visibleIssues = issues.slice(0, MAX_ISSUES_PER_MESSAGE);

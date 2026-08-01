@@ -18,6 +18,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 生成便于机器处理的日报，以及适合 AI 消费的日报摘要。
 - 生成 13 列 XLSX issue 台账，使用原生超链接，导入腾讯文档后可直接点击。“首次响应时间”取非 Issue 作者、非系统事件的第一条评论时间，只保留时间元数据，不保存评论正文；已追踪 Issue 从 open 变为 closed 的当次同步会以深色整行标记。Excel 写入成功后会清理已废弃的 CSV 台账。
 - 在已追踪的 issue 关闭时生成独立 Markdown 提醒，并保留当前关闭 issue 列表便于跟进。
+- 对新增内部和外部 Issue 发送本机及可选飞书群机器人提醒。飞书只有在 Webhook 成功接收后才记录为已投递，失败或未记录的投递会在后续成功同步时重试。
 - 将同步元数据、降级同步告警和协作者缓存保存到配置的 meta 目录。
 
 ## 默认输出结构
@@ -26,6 +27,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `GitCode Issues/meta/internal-members.json`
 - `GitCode Issues/meta/issue-closure-state.json`
 - `GitCode Issues/meta/issue-ledger-state.json`
+- `GitCode Issues/meta/issue-notification-state.json`
 - `GitCode Issues/meta/sync-state.json`
 - `GitCode Issues/reports/issue-ledger.xlsx`
 - `GitCode Issues/reports/internal-member-identity-review.md`
@@ -67,7 +69,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `Issues Folder`、`Meta Folder`、`Reports Folder`：vault 内的输出目录
 - `Generate daily reports`：同步完成后生成日报和 AI 摘要
 - `新增 Issue 时本机提醒？`：默认开启；对新增的内部和外部 Issue 显示本机提醒，并标明类型
-- `飞书群机器人 Webhook`：可选。插件会直接从 Obsidian 向群机器人发送新增内部和外部 Issue，并在每条中标明类型；留空则只在本机提醒
+- `飞书群机器人 Webhook`：可选。插件会直接从 Obsidian 向群机器人发送新增内部和外部 Issue，并在每条中标明类型；每条成功投递都会记录，未成功投递会在后续成功同步时重试；留空则只在本机提醒
 
 设置页里仍保留了原始导入器路径中的旧 API scope 兼容区块。这个分支当前的主要工作流是上面这套仓库同步模型。
 
@@ -77,7 +79,7 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 或者在命令面板里执行 `Sync IssueTracker`。
 - 如果启用了 `Refresh issues on startup`，插件会在 Obsidian 启动 30 秒后执行第一次自动同步。
 - 默认情况下，自动刷新每 15 分钟执行一次。
-- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步会提醒新增的内部和外部 Issue。失败或降级同步不会推进通知基线。重叠的同步触发会复用同一次运行，避免重复进度条和对同一生成文件的竞争写入。
+- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步会提醒新增的内部和外部 Issue。飞书只有在 Webhook 成功接收后才从待投递队列移除，失败会在后续成功同步时重试。首次启用投递记录时，当天已同步但未记录投递的内部 Issue 会直接补发，较早历史不会重放。失败或降级同步不会推进通知基线。重叠的同步触发会复用同一次运行，避免重复进度条和对同一生成文件的竞争写入。
 
 ## 生成的数据
 
