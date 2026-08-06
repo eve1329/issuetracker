@@ -469,6 +469,49 @@ describe('SyncService', () => {
 		expect(result.pendingFeishuIssues).toEqual(result.sameDayInternalFeishuBackfillIssues);
 	});
 
+	it('baselines existing internal Issues, then queues a newly detected first response once', async () => {
+		const settings = makeSettings({generateDailyReports: false, internalIssueAutoReplyEnabled: true});
+		const internalIssue = makeIssue({
+			author: {
+				avatar_url: '', id: 2, locked: false, name: 'Developer A', state: 'active', username: 'dev_a', web_url: '',
+			},
+		});
+		let autoReplyState: unknown = null;
+		mockReadJson.mockImplementation(async (path: string) => {
+			if (path === 'GitCode Issues/meta/internal-issue-auto-reply-state.json') {
+				return autoReplyState;
+			}
+			return null;
+		});
+		mockLoadRepoIssues.mockResolvedValueOnce([internalIssue]);
+
+		const baselineResult = await new SyncService(mockApp, settings).run();
+
+		expect(baselineResult.pendingInternalAutoReplyIssues).toEqual([]);
+		autoReplyState = mockWriteJson.mock.calls.find(([path]) => path === 'GitCode Issues/meta/internal-issue-auto-reply-state.json')?.[1];
+		expect(autoReplyState).toEqual(expect.objectContaining({initialized: true, pendingIssues: []}));
+
+		mockWriteJson.mockClear();
+		mockLoadRepoIssues.mockResolvedValueOnce([internalIssue]);
+		mockLoadFirstOtherPersonResponseAt.mockResolvedValueOnce('2026-06-17T10:30:00+08:00');
+
+		const queuedResult = await new SyncService(mockApp, settings).run();
+
+		expect(queuedResult.pendingInternalAutoReplyIssues).toEqual([
+			expect.objectContaining({
+				issueKey: 'CPF-KMP-CMP/repo-a#78',
+				iid: 78,
+				firstResponseAt: '2026-06-17T10:30:00+08:00',
+			}),
+		]);
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/internal-issue-auto-reply-state.json',
+			expect.objectContaining({
+				pendingIssues: [expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#78'})],
+			}),
+		);
+	});
+
 	it('does not return notifications when their durable state cannot be written', async () => {
 		const settings = makeSettings({generateDailyReports: false});
 		mockReadJson.mockImplementation(async (path: string) => (

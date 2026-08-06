@@ -45,6 +45,31 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenCalledWith(mockParams);
 	});
 
+	it('creates a comment and accepts the provider 201 response', async () => {
+		mockRequestUrl.mockResolvedValue({
+			status: 201,
+			json: Promise.resolve({id: 42}),
+			text: 'Created',
+		} as RequestUrlResponse);
+
+		await expect(GitlabApi.create(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/docs/issues/16/comments',
+			mockToken,
+			{body: '已收到'},
+		)).resolves.toEqual({id: 42});
+		expect(mockRequestUrl).toHaveBeenCalledWith({
+			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/docs/issues/16/comments',
+			method: 'POST',
+			contentType: 'application/json',
+			headers: {
+				'PRIVATE-TOKEN': mockToken,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({body: '已收到'}),
+			throw: false,
+		});
+	});
+
 	it('surfaces response text when the server rejects the request body with an auth message', async () => {
 		const mockResponse = {
 			status: 400,

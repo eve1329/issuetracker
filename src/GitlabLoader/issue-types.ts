@@ -35,6 +35,8 @@ export interface GitCodeOrgRepository {
 export interface IssueComment {
 	readonly created_at?: string;
 	readonly system?: boolean;
+	readonly body?: string;
+	readonly note?: string;
 	readonly author?: {
 		readonly username?: string;
 		readonly login?: string;

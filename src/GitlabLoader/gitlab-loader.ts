@@ -168,6 +168,23 @@ export default class GitlabLoader {
 		})));
 	}
 
+	async postIssueComment(repoName: string, issueIid: number, body: string): Promise<void> {
+		await GitlabApi.create(
+			this.getIssueCommentsUrl(repoName, issueIid),
+			this.settings.gitlabToken,
+			{body},
+		);
+	}
+
+	async hasIssueCommentContaining(repoName: string, issueIid: number, marker: string): Promise<boolean> {
+		const comments = await GitlabApi.loadAllPages<IssueComment>(
+			this.getIssueCommentsUrl(repoName, issueIid),
+			this.settings.gitlabToken,
+		);
+
+		return comments.some((comment) => (comment.body ?? comment.note ?? '').includes(marker));
+	}
+
 	async loadOrgRepos(): Promise<GitCodeOrgRepository[]> {
 		return GitlabApi.loadAllPages<GitCodeOrgRepository>(
 			this.getOrgReposUrl(),

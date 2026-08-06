@@ -6,12 +6,21 @@ import {GitlabIssuesSettings} from "./SettingsTab/settings-types";
 import {normalizeSettings} from "./SettingsTab/settings";
 import SyncService, {SyncProgress} from "./Sync/sync-service";
 import SingleFlight from './Sync/single-flight';
+import GitlabLoader from './GitlabLoader/gitlab-loader';
 import {sendFeishuNewIssueNotification, splitFeishuNewIssueBatches} from './Notifications/feishu-notifier';
 import {
 	formatLocalNewIssueNotification,
 	markFeishuIssuesDelivered,
 	normalizeIssueNotificationState,
 } from './Notifications/new-issue-notifications';
+import {
+	appendInternalIssueAutoReplyMarker,
+	buildInternalIssueAutoReplyMarker,
+	formatInternalIssueAutoReply,
+	markInternalIssueAutoRepliesDelivered,
+	normalizeInternalIssueAutoReplyState,
+	InternalIssueAutoReplyCandidate,
+} from './Notifications/internal-issue-auto-reply';
 import {logger} from "./utils/utils";
 
 class SyncProgressNotice {
@@ -201,6 +210,8 @@ export default class GitlabIssuesPlugin extends Plugin {
 			new Notice(formatLocalNewIssueNotification(result.newIssues), 10_000);
 		}
 
+		await this.replyToInternalIssues(result.pendingInternalAutoReplyIssues ?? []);
+
 		if (result.pendingFeishuIssues.length === 0) {
 			return;
 		}
@@ -220,6 +231,35 @@ export default class GitlabIssuesPlugin extends Plugin {
 		}
 	}
 
+	private async replyToInternalIssues(issues: InternalIssueAutoReplyCandidate[]) {
+		if (!this.settings.internalIssueAutoReplyEnabled || issues.length === 0) {
+			return;
+		}
+
+		const loader = new GitlabLoader(this.app, this.settings);
+		let deliveredCount = 0;
+		try {
+			for (const issue of issues) {
+				const body = formatInternalIssueAutoReply(this.settings.internalIssueAutoReplyTemplate, issue);
+				const marker = buildInternalIssueAutoReplyMarker(issue.issueKey);
+				if (!await loader.hasIssueCommentContaining(issue.sourceRepo, issue.iid, marker)) {
+					await loader.postIssueComment(
+						issue.sourceRepo,
+						issue.iid,
+						appendInternalIssueAutoReplyMarker(body, issue.issueKey),
+					);
+				}
+				await this.markInternalIssueAutoRepliesDelivered([issue]);
+				deliveredCount += 1;
+			}
+			new Notice(`已自动回复 ${deliveredCount} 条内部 Issue。`, 10_000);
+		} catch (error) {
+			const message = `内部 Issue 自动回复失败，未成功的项目会在下次同步重试：${error instanceof Error ? error.message : String(error)}`;
+			logger(message);
+			new Notice(message, 10_000);
+		}
+	}
+
 	private async markFeishuIssuesDelivered(issues: Awaited<ReturnType<SyncService['run']>>['pendingFeishuIssues']) {
 		const fs = new Filesystem(this.app.vault, this.settings);
 		const statePath = `${this.settings.metaFolder}/issue-notification-state.json`;
@@ -228,5 +268,18 @@ export default class GitlabIssuesPlugin extends Plugin {
 			throw new Error('无法读取飞书投递状态。');
 		}
 		await fs.writeJson(statePath, markFeishuIssuesDelivered(currentState, issues, new Date().toISOString()));
+	}
+
+	private async markInternalIssueAutoRepliesDelivered(issues: InternalIssueAutoReplyCandidate[]) {
+		const fs = new Filesystem(this.app.vault, this.settings);
+		const statePath = `${this.settings.metaFolder}/internal-issue-auto-reply-state.json`;
+		const currentState = normalizeInternalIssueAutoReplyState(await fs.readJson<unknown>(statePath));
+		if (!currentState) {
+			throw new Error('无法读取内部 Issue 自动回复状态。');
+		}
+		await fs.writeJson(
+			statePath,
+			markInternalIssueAutoRepliesDelivered(currentState, issues, new Date().toISOString()),
+		);
 	}
 }

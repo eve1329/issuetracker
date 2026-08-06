@@ -23,6 +23,14 @@ import {
 	normalizeIssueNotificationState,
 	queueFeishuIssueDeliveries,
 } from '../Notifications/new-issue-notifications';
+import {
+	buildInternalIssueAutoReplyBaseline,
+	findPendingInternalIssueAutoReplies,
+	InternalIssueAutoReplyCandidate,
+	InternalIssueAutoReplyState,
+	normalizeInternalIssueAutoReplyState,
+	queueInternalIssueAutoReplies,
+} from '../Notifications/internal-issue-auto-reply';
 import {logger} from "../utils/utils";
 
 export type SyncProgressPhase = 'starting' | 'members' | 'issues' | 'issue-files' | 'reports' | 'ledger' | 'closing' | 'complete';
@@ -39,6 +47,7 @@ export interface SyncRunResult {
 	newIssues: NewIssue[];
 	pendingFeishuIssues: NewIssue[];
 	sameDayInternalFeishuBackfillIssues: NewIssue[];
+	pendingInternalAutoReplyIssues?: InternalIssueAutoReplyCandidate[];
 }
 
 type LedgerWriteStage = 'prepare' | 'state' | 'xlsx' | 'final-state' | 'cleanup';
@@ -372,8 +381,11 @@ export default class SyncService {
 		let newIssues: NewIssue[] = [];
 		let pendingFeishuIssues: NewIssue[] = [];
 		let sameDayInternalFeishuBackfillIssues: NewIssue[] = [];
+		let pendingInternalAutoReplyIssues: InternalIssueAutoReplyCandidate[] = [];
 		const notificationStatePath = `${this.settings.metaFolder}/issue-notification-state.json`;
 		let nextNotificationState: ReturnType<typeof buildIssueNotificationState> | null = null;
+		const autoReplyStatePath = `${this.settings.metaFolder}/internal-issue-auto-reply-state.json`;
+		let nextInternalAutoReplyState: InternalIssueAutoReplyState | null = null;
 
 		if (syncStatus === 'success') {
 			try {
@@ -401,6 +413,27 @@ export default class SyncService {
 				pendingFeishuIssues = [];
 				sameDayInternalFeishuBackfillIssues = [];
 				const message = `Failed to persist issue notification state: ${this.getErrorMessage(error)}`;
+				warningMessages.push(message);
+				logger(message);
+			}
+		}
+
+		if (syncStatus === 'success' && this.settings.internalIssueAutoReplyEnabled) {
+			try {
+				const previousAutoReplyState = normalizeInternalIssueAutoReplyState(
+					await this.fs.readJson<unknown>(autoReplyStatePath),
+				);
+				if (!previousAutoReplyState) {
+					nextInternalAutoReplyState = buildInternalIssueAutoReplyBaseline(normalizedNotes);
+				} else {
+					nextInternalAutoReplyState = queueInternalIssueAutoReplies(previousAutoReplyState, normalizedNotes);
+					pendingInternalAutoReplyIssues = findPendingInternalIssueAutoReplies(nextInternalAutoReplyState);
+				}
+			} catch (error) {
+				syncStatus = 'degraded';
+				pendingInternalAutoReplyIssues = [];
+				nextInternalAutoReplyState = null;
+				const message = `Failed to persist internal Issue auto-reply state: ${this.getErrorMessage(error)}`;
 				warningMessages.push(message);
 				logger(message);
 			}
@@ -438,6 +471,18 @@ export default class SyncService {
 				await writeSyncState();
 			}
 		}
+		if (syncStatus === 'success' && nextInternalAutoReplyState) {
+			try {
+				await this.fs.writeJson(autoReplyStatePath, nextInternalAutoReplyState);
+			} catch (error) {
+				syncStatus = 'degraded';
+				pendingInternalAutoReplyIssues = [];
+				const message = `Failed to persist internal Issue auto-reply state: ${this.getErrorMessage(error)}`;
+				warningMessages.push(message);
+				logger(message);
+				await writeSyncState();
+			}
+		}
 
 		this.reportProgress(
 			'complete',
@@ -449,7 +494,11 @@ export default class SyncService {
 					: '同步完成，但部分任务有异常',
 		);
 
-		return {syncStatus, ledgerWriteFailed, newIssues, pendingFeishuIssues, sameDayInternalFeishuBackfillIssues};
+		const result: SyncRunResult = {syncStatus, ledgerWriteFailed, newIssues, pendingFeishuIssues, sameDayInternalFeishuBackfillIssues};
+		if (this.settings.internalIssueAutoReplyEnabled && syncStatus === 'success' && nextInternalAutoReplyState) {
+			result.pendingInternalAutoReplyIssues = pendingInternalAutoReplyIssues;
+		}
+		return result;
 	}
 
 	private reportProgress(phase: SyncProgressPhase, percent: number, message: string) {

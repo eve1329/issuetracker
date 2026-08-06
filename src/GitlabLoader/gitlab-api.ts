@@ -63,6 +63,31 @@ export default class GitlabApi {
 			});
 	}
 
+	static create<T>(url: string, gitlabToken: string, body: unknown): Promise<T> {
+		const requestUrlString = GitlabApi.appendTokenQueryIfNeeded(url, gitlabToken);
+		const headers = {
+			...GitlabApi.buildHeaders(requestUrlString, gitlabToken),
+			'Content-Type': 'application/json',
+		};
+		const params: RequestUrlParam = {
+			url: requestUrlString,
+			method: 'POST',
+			contentType: 'application/json',
+			headers,
+			body: JSON.stringify(body),
+			throw: false,
+		};
+
+		return requestUrl(params)
+			.then((response: RequestUrlResponse) => {
+				if (response.status < 200 || response.status >= 300) {
+					throw new Error(GitlabApi.extractErrorMessage(response.text));
+				}
+
+				return response.json as Promise<T>;
+			});
+	}
+
 	static async loadAllPages<T>(baseUrl: string, gitlabToken: string): Promise<T[]> {
 		const result: T[] = [];
 		let page = 1;

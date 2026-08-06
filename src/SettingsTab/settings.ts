@@ -1,4 +1,5 @@
 import {GitlabIssuesSettings, SettingsTab, SupportedGitHost, UiLanguage} from "./settings-types";
+import {DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE} from '../Notifications/internal-issue-auto-reply';
 
 export function detectGitHost(gitlabUrl: string, apiBaseUrl?: string): SupportedGitHost {
 	const combined = `${gitlabUrl} ${apiBaseUrl ?? ''}`.toLowerCase();
@@ -157,6 +158,8 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	refreshOnStartup: true,
 	localNewIssueNotifications: true,
 	feishuWebhookUrl: '',
+	internalIssueAutoReplyEnabled: false,
+	internalIssueAutoReplyTemplate: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
 		return resolveGitlabApiBaseUrl(this.gitlabUrl, this.apiBaseUrl);
@@ -188,6 +191,12 @@ export function normalizeSettings(loadedData?: PersistedSettings): GitlabIssuesS
 	const feishuWebhookUrl = typeof rawData.feishuWebhookUrl === 'string'
 		? rawData.feishuWebhookUrl.trim()
 		: '';
+	const internalIssueAutoReplyEnabled = typeof rawData.internalIssueAutoReplyEnabled === 'boolean'
+		? rawData.internalIssueAutoReplyEnabled
+		: DEFAULT_SETTINGS.internalIssueAutoReplyEnabled;
+	const internalIssueAutoReplyTemplate = typeof rawData.internalIssueAutoReplyTemplate === 'string'
+		? rawData.internalIssueAutoReplyTemplate.trim()
+		: DEFAULT_SETTINGS.internalIssueAutoReplyTemplate;
 	const classificationRules = {
 		titlePrefixes: {
 			...DEFAULT_SETTINGS.classificationRules.titlePrefixes,
@@ -210,6 +219,8 @@ export function normalizeSettings(loadedData?: PersistedSettings): GitlabIssuesS
 		classificationRules,
 		localNewIssueNotifications,
 		feishuWebhookUrl,
+		internalIssueAutoReplyEnabled,
+		internalIssueAutoReplyTemplate,
 		issueFilter: canonicalFilter,
 		filter: canonicalFilter,
 	};
@@ -357,6 +368,13 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
 				value: 'feishuWebhookUrl',
 				inputType: 'password',
+			},
+			{
+				title: 'Internal Issue auto-reply template',
+				description: 'Used once after the first non-author comment on an internal Issue. Supported placeholders: {{repo}}, {{iid}}, {{title}}, {{author}}, {{authorUsername}}, {{url}}, {{firstResponseAt}}.',
+				placeholder: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
+				value: 'internalIssueAutoReplyTemplate',
+				inputType: 'textarea',
 			}
 		],
 		dropdowns: [{
@@ -387,6 +405,10 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			{
 				title: 'Show local notifications for new Issues?',
 				value: 'localNewIssueNotifications'
+			},
+			{
+				title: 'Automatically reply once to internal Issues after their first response?',
+				value: 'internalIssueAutoReplyEnabled'
 			},
 			{
 				title: 'Generate daily reports?',
@@ -532,6 +554,13 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...',
 				value: 'feishuWebhookUrl',
 				inputType: 'password',
+			},
+			{
+				title: '内部 Issue 自动回复模板',
+				description: '内部 Issue 首次检测到非作者评论后只回复一次。支持占位符：{{repo}}、{{iid}}、{{title}}、{{author}}、{{authorUsername}}、{{url}}、{{firstResponseAt}}。',
+				placeholder: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
+				value: 'internalIssueAutoReplyTemplate',
+				inputType: 'textarea',
 			}
 		],
 		dropdowns: [{
@@ -562,6 +591,10 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			{
 				title: '新增 Issue 时本机提醒？',
 				value: 'localNewIssueNotifications'
+			},
+			{
+				title: '内部 Issue 首次响应后自动回复一次？',
+				value: 'internalIssueAutoReplyEnabled'
 			},
 			{
 				title: '生成日报？',

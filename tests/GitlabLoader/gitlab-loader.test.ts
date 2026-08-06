@@ -199,6 +199,33 @@ describe('GitlabLoader', () => {
 		);
 	});
 
+	it('posts a comment to the repository Issue comments endpoint', async () => {
+		const mockCreate = jest.spyOn(GitlabApi, 'create').mockResolvedValue(undefined);
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+
+		await gitlabLoader.postIssueComment('docs', 16, '已收到');
+
+		expect(mockCreate).toHaveBeenCalledWith(
+			'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/docs/issues/16/comments',
+			mockSettings.gitlabToken,
+			{body: '已收到'},
+		);
+		mockCreate.mockRestore();
+	});
+
+	it('detects an existing auto-reply marker in Issue comments', async () => {
+		mockLoadAllPages.mockResolvedValueOnce([
+			{body: '<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->'},
+		]);
+
+		await expect(gitlabLoader.hasIssueCommentContaining(
+			'docs',
+			16,
+			'<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->',
+		)).resolves.toBe(true);
+	});
+
 	it('loads repo issues with the GitHub repository endpoint when configured against GitHub', async () => {
 		mockSettings.gitlabUrl = 'https://github.com';
 		mockSettings.apiBaseUrl = 'https://api.github.com';

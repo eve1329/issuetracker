@@ -85,9 +85,11 @@ describe('DEFAULT_SETTINGS', () => {
 			showIcon: false,
 			purgeIssues: false,
 			refreshOnStartup: true,
-			localNewIssueNotifications: true,
-			feishuWebhookUrl: '',
-			intervalOfRefresh: '15',
+		localNewIssueNotifications: true,
+		feishuWebhookUrl: '',
+		internalIssueAutoReplyEnabled: false,
+		internalIssueAutoReplyTemplate: '已收到，感谢反馈，我们会尽快跟进。',
+		intervalOfRefresh: '15',
 		};
 
 		expect(DEFAULT_SETTINGS).toEqual({...expectedDefaults, gitlabApiUrl: expect.any(Function)});
@@ -158,6 +160,16 @@ describe('DEFAULT_SETTINGS', () => {
 			feishuWebhookUrl: 'https://open.feishu.cn/hook/test',
 		}));
 		expect(normalized).not.toHaveProperty('localNewExternalIssueNotifications');
+	});
+
+	it('normalizes the internal Issue auto-reply settings', () => {
+		const normalized = normalizeSettings({
+			internalIssueAutoReplyEnabled: true,
+			internalIssueAutoReplyTemplate: '  收到 {{repo}}#{{iid}}  ',
+		});
+
+		expect(normalized.internalIssueAutoReplyEnabled).toBe(true);
+		expect(normalized.internalIssueAutoReplyTemplate).toBe('收到 {{repo}}#{{iid}}');
 	});
 });
 
@@ -397,6 +409,13 @@ describe('settings', () => {
 				value: 'feishuWebhookUrl',
 				inputType: 'password',
 			},
+			{
+				title: 'Internal Issue auto-reply template',
+				description: 'Used once after the first non-author comment on an internal Issue. Supported placeholders: {{repo}}, {{iid}}, {{title}}, {{author}}, {{authorUsername}}, {{url}}, {{firstResponseAt}}.',
+				placeholder: '已收到，感谢反馈，我们会尽快跟进。',
+				value: 'internalIssueAutoReplyTemplate',
+				inputType: 'textarea',
+			},
 		];
 
 		expect(settings.settingInputs).toEqual(expectedSettingInputs);
@@ -460,6 +479,10 @@ describe('settings', () => {
 			{
 				title: 'Show local notifications for new Issues?',
 				value: 'localNewIssueNotifications',
+			},
+			{
+				title: 'Automatically reply once to internal Issues after their first response?',
+				value: 'internalIssueAutoReplyEnabled',
 			},
 				{
 					title: 'Generate daily reports?',

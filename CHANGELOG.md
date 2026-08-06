@@ -2,6 +2,11 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.11 - 2026-08-06
+
+- Optionally reply once to internal Issues after the first non-author comment is detected, with a configurable template and durable retry state.
+- Keep external Issues on the existing local and Feishu notification path without automatic comment write-back.
+
 ## 0.2.10 - 2026-08-01
 
 - Stabilize the same-day Feishu delivery-reconciliation coverage across CI runner time zones.
