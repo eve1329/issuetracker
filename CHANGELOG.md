@@ -2,6 +2,10 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.12 - 2026-08-06
+
+- Make the internal Issue auto-reply delay configurable in hours, defaulting to 24 hours from the first non-author comment and allowing `0` for the next successful sync.
+
 ## 0.2.11 - 2026-08-06
 
 - Optionally reply once to internal Issues after the first non-author comment is detected, with a configurable template and durable retry state.

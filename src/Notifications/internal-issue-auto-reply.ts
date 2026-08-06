@@ -2,6 +2,7 @@ import {NormalizedIssueNote} from '../Issues/issue-note';
 import {buildIssueKey, deduplicateIssues} from '../Issues/issue-scope';
 
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE = '已收到，感谢反馈，我们会尽快跟进。';
+export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS = 24;
 
 export function buildInternalIssueAutoReplyMarker(issueKey: string) {
 	return `<!-- issuetracker-auto-reply:${issueKey} -->`;
@@ -128,8 +129,40 @@ export function queueInternalIssueAutoReplies(
 
 export function findPendingInternalIssueAutoReplies(
 	state: InternalIssueAutoReplyState,
+	now = new Date().toISOString(),
+	delayHours = DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
 ): InternalIssueAutoReplyCandidate[] {
-	return [...state.pendingIssues];
+	const nowTime = Date.parse(now);
+	if (!Number.isFinite(nowTime)) {
+		return [];
+	}
+
+	return state.pendingIssues.filter((issue) => {
+		const dueAt = getInternalIssueAutoReplyDueAt(issue.firstResponseAt, delayHours);
+		return Boolean(dueAt) && Date.parse(dueAt) <= nowTime;
+	});
+}
+
+export function getInternalIssueAutoReplyDueAt(firstResponseAt: string, delayHours: unknown) {
+	const firstResponseTime = Date.parse(firstResponseAt);
+	if (!Number.isFinite(firstResponseTime)) {
+		return '';
+	}
+
+	const normalizedDelayHours = normalizeInternalIssueAutoReplyDelayHours(delayHours);
+	return new Date(firstResponseTime + normalizedDelayHours * 60 * 60 * 1000).toISOString();
+}
+
+export function normalizeInternalIssueAutoReplyDelayHours(value: unknown) {
+	const rawValue = typeof value === 'string' ? value.trim() : value;
+	if (rawValue === '' || (typeof rawValue !== 'number' && typeof rawValue !== 'string')) {
+		return DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS;
+	}
+
+	const delayHours = Number(rawValue);
+	return Number.isFinite(delayHours) && delayHours >= 0
+		? delayHours
+		: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS;
 }
 
 export function markInternalIssueAutoRepliesDelivered(

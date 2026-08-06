@@ -5,6 +5,7 @@ import {
 	appendInternalIssueAutoReplyMarker,
 	findPendingInternalIssueAutoReplies,
 	formatInternalIssueAutoReply,
+	getInternalIssueAutoReplyDueAt,
 	markInternalIssueAutoRepliesDelivered,
 	normalizeInternalIssueAutoReplyState,
 	queueInternalIssueAutoReplies,
@@ -65,7 +66,12 @@ describe('internal Issue auto-reply state', () => {
 			}),
 		]);
 
-		expect(findPendingInternalIssueAutoReplies(queued)).toEqual([
+		expect(getInternalIssueAutoReplyDueAt('2026-08-06T03:00:00.000Z', 24)).toBe('2026-08-07T03:00:00.000Z');
+		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-07T02:59:59.999Z', 24)).toEqual([]);
+		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-07T03:00:00.000Z', 24)).toEqual([
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#2', iid: 2}),
+		]);
+		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-06T03:00:00.000Z', 0)).toEqual([
 			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#2', iid: 2}),
 		]);
 	});

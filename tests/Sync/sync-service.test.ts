@@ -470,7 +470,11 @@ describe('SyncService', () => {
 	});
 
 	it('baselines existing internal Issues, then queues a newly detected first response once', async () => {
-		const settings = makeSettings({generateDailyReports: false, internalIssueAutoReplyEnabled: true});
+		const settings = makeSettings({
+			generateDailyReports: false,
+			internalIssueAutoReplyEnabled: true,
+			internalIssueAutoReplyDelayHours: 0,
+		});
 		const internalIssue = makeIssue({
 			author: {
 				avatar_url: '', id: 2, locked: false, name: 'Developer A', state: 'active', username: 'dev_a', web_url: '',

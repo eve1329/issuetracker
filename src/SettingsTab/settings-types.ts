@@ -39,6 +39,7 @@ export interface GitlabIssuesSettings {
 	feishuWebhookUrl: string;
 	internalIssueAutoReplyEnabled: boolean;
 	internalIssueAutoReplyTemplate: string;
+	internalIssueAutoReplyDelayHours: number;
 	intervalOfRefresh: GitlabRefreshInterval;
 	gitlabApiUrl(): string;
 }
@@ -75,9 +76,10 @@ export interface SettingInput extends Setting {
 		| "issueFilter"
 		| "feishuWebhookUrl"
 		| "internalIssueAutoReplyTemplate"
+		| "internalIssueAutoReplyDelayHours"
 	>,
-	modifier?: 'normalizePath' | 'stringArray' | 'json';
-	inputType?: 'text' | 'textarea' | 'password';
+	modifier?: 'normalizePath' | 'stringArray' | 'json' | 'number';
+	inputType?: 'text' | 'textarea' | 'password' | 'number';
 }
 export interface DropdownInputs extends Setting {
 	value: keyof Pick<GitlabIssuesSettings, "gitlabIssuesLevel" | "intervalOfRefresh">

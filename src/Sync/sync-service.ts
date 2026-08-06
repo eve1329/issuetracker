@@ -427,7 +427,11 @@ export default class SyncService {
 					nextInternalAutoReplyState = buildInternalIssueAutoReplyBaseline(normalizedNotes);
 				} else {
 					nextInternalAutoReplyState = queueInternalIssueAutoReplies(previousAutoReplyState, normalizedNotes);
-					pendingInternalAutoReplyIssues = findPendingInternalIssueAutoReplies(nextInternalAutoReplyState);
+					pendingInternalAutoReplyIssues = findPendingInternalIssueAutoReplies(
+						nextInternalAutoReplyState,
+						syncTime,
+						this.settings.internalIssueAutoReplyDelayHours,
+					);
 				}
 			} catch (error) {
 				syncStatus = 'degraded';

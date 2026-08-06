@@ -79,6 +79,16 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 						console.error(error);
 						return;
 					}
+				} else if (setting.modifier === 'number') {
+					const normalizedValue = value.trim();
+					if (!normalizedValue) {
+						return;
+					}
+					const numericValue = Number(normalizedValue);
+					if (!Number.isFinite(numericValue) || numericValue < 0) {
+						return;
+					}
+					this.plugin.settings[setting.value] = numericValue as never;
 				} else {
 					this.plugin.settings[setting.value] = value as never;
 				}
@@ -102,6 +112,11 @@ export class GitlabIssuesSettingTab extends PluginSettingTab {
 			uiSetting.addText(text => {
 				if (setting.inputType === 'password') {
 					text.inputEl.type = 'password';
+				}
+				if (setting.inputType === 'number') {
+					text.inputEl.type = 'number';
+					text.inputEl.min = '0';
+					text.inputEl.step = '1';
 				}
 
 				return text

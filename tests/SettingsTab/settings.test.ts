@@ -89,6 +89,7 @@ describe('DEFAULT_SETTINGS', () => {
 		feishuWebhookUrl: '',
 		internalIssueAutoReplyEnabled: false,
 		internalIssueAutoReplyTemplate: '已收到，感谢反馈，我们会尽快跟进。',
+		internalIssueAutoReplyDelayHours: 24,
 		intervalOfRefresh: '15',
 		};
 
@@ -166,10 +167,13 @@ describe('DEFAULT_SETTINGS', () => {
 		const normalized = normalizeSettings({
 			internalIssueAutoReplyEnabled: true,
 			internalIssueAutoReplyTemplate: '  收到 {{repo}}#{{iid}}  ',
+			internalIssueAutoReplyDelayHours: 12,
 		});
 
 		expect(normalized.internalIssueAutoReplyEnabled).toBe(true);
 		expect(normalized.internalIssueAutoReplyTemplate).toBe('收到 {{repo}}#{{iid}}');
+		expect(normalized.internalIssueAutoReplyDelayHours).toBe(12);
+		expect(normalizeSettings({internalIssueAutoReplyDelayHours: -1}).internalIssueAutoReplyDelayHours).toBe(24);
 	});
 });
 
@@ -411,10 +415,18 @@ describe('settings', () => {
 			},
 			{
 				title: 'Internal Issue auto-reply template',
-				description: 'Used once after the first non-author comment on an internal Issue. Supported placeholders: {{repo}}, {{iid}}, {{title}}, {{author}}, {{authorUsername}}, {{url}}, {{firstResponseAt}}.',
+				description: 'Used once after the first non-author comment on an internal Issue and the configured delay. Supported placeholders: {{repo}}, {{iid}}, {{title}}, {{author}}, {{authorUsername}}, {{url}}, {{firstResponseAt}}.',
 				placeholder: '已收到，感谢反馈，我们会尽快跟进。',
 				value: 'internalIssueAutoReplyTemplate',
 				inputType: 'textarea',
+			},
+			{
+				title: 'Internal Issue auto-reply delay (hours)',
+				description: 'Wait this many hours after the first non-author comment before replying. Use 0 to reply on the next successful sync.',
+				placeholder: '24',
+				value: 'internalIssueAutoReplyDelayHours',
+				modifier: 'number',
+				inputType: 'number',
 			},
 		];
 
@@ -481,7 +493,7 @@ describe('settings', () => {
 				value: 'localNewIssueNotifications',
 			},
 			{
-				title: 'Automatically reply once to internal Issues after their first response?',
+				title: 'Automatically reply once to internal Issues after their configured delay?',
 				value: 'internalIssueAutoReplyEnabled',
 			},
 				{

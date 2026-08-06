@@ -1,5 +1,9 @@
 import {GitlabIssuesSettings, SettingsTab, SupportedGitHost, UiLanguage} from "./settings-types";
-import {DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE} from '../Notifications/internal-issue-auto-reply';
+import {
+	DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
+	DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
+	normalizeInternalIssueAutoReplyDelayHours,
+} from '../Notifications/internal-issue-auto-reply';
 
 export function detectGitHost(gitlabUrl: string, apiBaseUrl?: string): SupportedGitHost {
 	const combined = `${gitlabUrl} ${apiBaseUrl ?? ''}`.toLowerCase();
@@ -160,6 +164,7 @@ export const DEFAULT_SETTINGS: GitlabIssuesSettings = {
 	feishuWebhookUrl: '',
 	internalIssueAutoReplyEnabled: false,
 	internalIssueAutoReplyTemplate: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
+	internalIssueAutoReplyDelayHours: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
 	intervalOfRefresh: "15",
 	gitlabApiUrl(): string {
 		return resolveGitlabApiBaseUrl(this.gitlabUrl, this.apiBaseUrl);
@@ -197,6 +202,7 @@ export function normalizeSettings(loadedData?: PersistedSettings): GitlabIssuesS
 	const internalIssueAutoReplyTemplate = typeof rawData.internalIssueAutoReplyTemplate === 'string'
 		? rawData.internalIssueAutoReplyTemplate.trim()
 		: DEFAULT_SETTINGS.internalIssueAutoReplyTemplate;
+	const internalIssueAutoReplyDelayHours = normalizeInternalIssueAutoReplyDelayHours(rawData.internalIssueAutoReplyDelayHours);
 	const classificationRules = {
 		titlePrefixes: {
 			...DEFAULT_SETTINGS.classificationRules.titlePrefixes,
@@ -221,6 +227,7 @@ export function normalizeSettings(loadedData?: PersistedSettings): GitlabIssuesS
 		feishuWebhookUrl,
 		internalIssueAutoReplyEnabled,
 		internalIssueAutoReplyTemplate,
+		internalIssueAutoReplyDelayHours,
 		issueFilter: canonicalFilter,
 		filter: canonicalFilter,
 	};
@@ -371,10 +378,18 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: 'Internal Issue auto-reply template',
-				description: 'Used once after the first non-author comment on an internal Issue. Supported placeholders: {{repo}}, {{iid}}, {{title}}, {{author}}, {{authorUsername}}, {{url}}, {{firstResponseAt}}.',
+				description: 'Used once after the first non-author comment on an internal Issue and the configured delay. Supported placeholders: {{repo}}, {{iid}}, {{title}}, {{author}}, {{authorUsername}}, {{url}}, {{firstResponseAt}}.',
 				placeholder: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
 				value: 'internalIssueAutoReplyTemplate',
 				inputType: 'textarea',
+			},
+			{
+				title: 'Internal Issue auto-reply delay (hours)',
+				description: 'Wait this many hours after the first non-author comment before replying. Use 0 to reply on the next successful sync.',
+				placeholder: String(DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS),
+				value: 'internalIssueAutoReplyDelayHours',
+				modifier: 'number',
+				inputType: 'number',
 			}
 		],
 		dropdowns: [{
@@ -407,7 +422,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'localNewIssueNotifications'
 			},
 			{
-				title: 'Automatically reply once to internal Issues after their first response?',
+				title: 'Automatically reply once to internal Issues after their configured delay?',
 				value: 'internalIssueAutoReplyEnabled'
 			},
 			{
@@ -557,10 +572,18 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 			},
 			{
 				title: '内部 Issue 自动回复模板',
-				description: '内部 Issue 首次检测到非作者评论后只回复一次。支持占位符：{{repo}}、{{iid}}、{{title}}、{{author}}、{{authorUsername}}、{{url}}、{{firstResponseAt}}。',
+				description: '内部 Issue 首次检测到非作者评论并等待设定时长后只回复一次。支持占位符：{{repo}}、{{iid}}、{{title}}、{{author}}、{{authorUsername}}、{{url}}、{{firstResponseAt}}。',
 				placeholder: DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE,
 				value: 'internalIssueAutoReplyTemplate',
 				inputType: 'textarea',
+			},
+			{
+				title: '内部 Issue 自动回复延迟（小时）',
+				description: '首次检测到非作者评论后等待指定小时数再回复。填 0 表示下一次成功同步即可回复。',
+				placeholder: String(DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS),
+				value: 'internalIssueAutoReplyDelayHours',
+				modifier: 'number',
+				inputType: 'number',
 			}
 		],
 		dropdowns: [{
@@ -593,7 +616,7 @@ const SETTINGS_BY_LANGUAGE: Record<UiLanguage, SettingsTab> = {
 				value: 'localNewIssueNotifications'
 			},
 			{
-				title: '内部 Issue 首次响应后自动回复一次？',
+				title: '内部 Issue 在设定延迟后自动回复一次？',
 				value: 'internalIssueAutoReplyEnabled'
 			},
 			{
