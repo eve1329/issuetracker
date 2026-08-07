@@ -65,16 +65,17 @@ export default class GitlabApi {
 
 	static create<T>(url: string, gitlabToken: string, body: unknown): Promise<T> {
 		const requestUrlString = GitlabApi.appendTokenQueryIfNeeded(url, gitlabToken);
+		const requestBody = GitlabApi.buildCreateBody(requestUrlString, body);
 		const headers = {
 			...GitlabApi.buildHeaders(requestUrlString, gitlabToken),
-			'Content-Type': 'application/json',
+			'Content-Type': requestBody.contentType,
 		};
 		const params: RequestUrlParam = {
 			url: requestUrlString,
 			method: 'POST',
-			contentType: 'application/json',
+			contentType: requestBody.contentType,
 			headers,
-			body: JSON.stringify(body),
+			body: requestBody.body,
 			throw: false,
 		};
 
@@ -86,6 +87,27 @@ export default class GitlabApi {
 
 				return response.json as Promise<T>;
 			});
+	}
+
+	private static buildCreateBody(url: string, body: unknown) {
+		if (detectGitHost(url, url) === 'gitcode' && body && typeof body === 'object' && !Array.isArray(body)) {
+			const form = new URLSearchParams();
+			for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+				if (value !== undefined && value !== null) {
+					form.set(key, String(value));
+				}
+			}
+
+			return {
+				contentType: 'application/x-www-form-urlencoded',
+				body: form.toString(),
+			};
+		}
+
+		return {
+			contentType: 'application/json',
+			body: JSON.stringify(body),
+		};
 	}
 
 	static async loadAllPages<T>(baseUrl: string, gitlabToken: string): Promise<T[]> {

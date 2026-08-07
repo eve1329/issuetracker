@@ -1,7 +1,6 @@
 import {NormalizedIssueNote} from '../../src/Issues/issue-note';
 import {
 	buildIssueNotificationState,
-	findSameDayInternalFeishuBackfillIssues,
 	findNewIssues,
 	findPendingFeishuIssues,
 	formatLocalNewIssueNotification,
@@ -122,23 +121,28 @@ describe('new issue notifications', () => {
 		});
 	});
 
-	it('identifies only same-day internal Issues for automatic delivery reconciliation in every runner time zone', () => {
-		const previousState = {
-			seenIssueKeys: [
-				'CPF-KMP-CMP/repo-a#1',
-				'CPF-KMP-CMP/repo-a#2',
-				'CPF-KMP-CMP/repo-a#3',
-			],
-		};
-		const candidates = findSameDayInternalFeishuBackfillIssues([
-			// The matching timestamp is the same instant as the reconciliation time.
-			// The stale candidate is two days older, so both expectations are timezone-invariant.
-			makeIssue({iid: 1, isInternalAuthor: true, createdAt: '2026-08-01T12:00:00.000Z'}),
-			makeIssue({iid: 2, isInternalAuthor: false, createdAt: '2026-08-01T12:00:00.000Z'}),
-			makeIssue({iid: 3, isInternalAuthor: true, createdAt: '2026-07-30T12:00:00.000Z'}),
-		], previousState, '2026-08-01T12:00:00.000Z');
+	it('queues only external Issues and clears legacy internal pending deliveries', () => {
+		const [externalIssue, internalIssue] = findNewIssues([
+			makeIssue({iid: 2, referencesFull: 'CPF-KMP-CMP/repo-a#2'}),
+			makeIssue({
+				iid: 3,
+				isInternalAuthor: true,
+				referencesFull: 'CPF-KMP-CMP/repo-a#3',
+			}),
+		], {seenIssueKeys: []});
+		const queued = queueFeishuIssueDeliveries({
+			seenIssueKeys: [externalIssue.issueKey, internalIssue.issueKey],
+			feishuDelivery: {
+				pendingIssues: [internalIssue],
+				deliveries: {},
+			},
+		}, [externalIssue, internalIssue]);
 
-		expect(candidates).toHaveLength(1);
-		expect(candidates[0]).toEqual(expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#1', authorType: 'internal'}));
+		expect(findPendingFeishuIssues(queued)).toEqual([
+			expect.objectContaining({issueKey: externalIssue.issueKey, authorType: 'external'}),
+		]);
+		expect(queued.feishuDelivery?.pendingIssues).not.toEqual(
+			expect.arrayContaining([expect.objectContaining({authorType: 'internal'})]),
+		);
 	});
 });

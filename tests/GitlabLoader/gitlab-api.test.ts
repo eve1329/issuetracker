@@ -45,7 +45,7 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenCalledWith(mockParams);
 	});
 
-	it('creates a comment and accepts the provider 201 response', async () => {
+	it('creates a GitCode comment as a form field and accepts the provider 201 response', async () => {
 		mockRequestUrl.mockResolvedValue({
 			status: 201,
 			json: Promise.resolve({id: 42}),
@@ -60,9 +60,36 @@ describe('GitlabApi', () => {
 		expect(mockRequestUrl).toHaveBeenCalledWith({
 			url: 'https://gitcode.com/api/v5/repos/CPF-KMP-CMP/docs/issues/16/comments',
 			method: 'POST',
-			contentType: 'application/json',
+			contentType: 'application/x-www-form-urlencoded',
 			headers: {
 				'PRIVATE-TOKEN': mockToken,
+				'Content-Type': 'application/x-www-form-urlencoded',
+			},
+			body: 'body=%E5%B7%B2%E6%94%B6%E5%88%B0',
+			throw: false,
+		});
+	});
+
+	it('keeps JSON request bodies for GitHub comment APIs', async () => {
+		mockRequestUrl.mockResolvedValue({
+			status: 201,
+			json: Promise.resolve({id: 43}),
+			text: 'Created',
+		} as RequestUrlResponse);
+
+		await expect(GitlabApi.create(
+			'https://api.github.com/repos/CPF-KMP-CMP/docs/issues/16/comments',
+			mockToken,
+			{body: '已收到'},
+		)).resolves.toEqual({id: 43});
+		expect(mockRequestUrl).toHaveBeenCalledWith({
+			url: 'https://api.github.com/repos/CPF-KMP-CMP/docs/issues/16/comments',
+			method: 'POST',
+			contentType: 'application/json',
+			headers: {
+				Authorization: `Bearer ${mockToken}`,
+				Accept: 'application/vnd.github+json',
+				'X-GitHub-Api-Version': '2022-11-28',
 				'Content-Type': 'application/json',
 			},
 			body: JSON.stringify({body: '已收到'}),

@@ -1,22 +1,24 @@
 import {requestUrl} from 'obsidian';
-import {formatIssueAuthorType, formatNewIssueCounts, NewIssue} from './new-issue-notifications';
+import {NewIssue} from './new-issue-notifications';
 
 export const MAX_ISSUES_PER_MESSAGE = 10;
 
 export function splitFeishuNewIssueBatches(issues: NewIssue[]): NewIssue[][] {
+	const externalIssues = issues.filter(isExternalIssue);
 	const batches: NewIssue[][] = [];
-	for (let index = 0; index < issues.length; index += MAX_ISSUES_PER_MESSAGE) {
-		batches.push(issues.slice(index, index + MAX_ISSUES_PER_MESSAGE));
+	for (let index = 0; index < externalIssues.length; index += MAX_ISSUES_PER_MESSAGE) {
+		batches.push(externalIssues.slice(index, index + MAX_ISSUES_PER_MESSAGE));
 	}
 	return batches;
 }
 
 export function buildFeishuNewIssuePayload(issues: NewIssue[]) {
-	const visibleIssues = issues.slice(0, MAX_ISSUES_PER_MESSAGE);
+	const externalIssues = issues.filter(isExternalIssue);
+	const visibleIssues = externalIssues.slice(0, MAX_ISSUES_PER_MESSAGE);
 	const content = visibleIssues.map((issue) => ([
 		{
 			tag: 'text',
-			text: `[${formatIssueAuthorType(issue)} Issue] ${issue.sourceRepo}#${issue.iid} ${issue.title}\n作者：${issue.authorName || issue.authorUsername}`,
+			text: `[外部 Issue] ${issue.sourceRepo}#${issue.iid} ${issue.title}\n作者：${issue.authorName || issue.authorUsername}`,
 		},
 		{
 			tag: 'a',
@@ -25,9 +27,9 @@ export function buildFeishuNewIssuePayload(issues: NewIssue[]) {
 		},
 	]));
 
-	if (issues.length > visibleIssues.length) {
-		const hiddenIssues = issues.slice(visibleIssues.length);
-		content.push([{tag: 'text', text: `另有 ${hiddenIssues.length} 个新增 Issue（${formatNewIssueCounts(hiddenIssues)}）。`}]);
+	if (externalIssues.length > visibleIssues.length) {
+		const hiddenIssues = externalIssues.slice(visibleIssues.length);
+		content.push([{tag: 'text', text: `另有 ${hiddenIssues.length} 个新增外部 Issue。`}]);
 	}
 
 	return {
@@ -35,7 +37,7 @@ export function buildFeishuNewIssuePayload(issues: NewIssue[]) {
 		content: {
 			post: {
 				zh_cn: {
-					title: `IssueTracker：${issues.length} 个新增 Issue（${formatNewIssueCounts(issues)}）`,
+					title: `IssueTracker：${externalIssues.length} 个新增外部 Issue`,
 					content,
 				},
 			},
@@ -48,7 +50,8 @@ export async function sendFeishuNewIssueNotification(
 	issues: NewIssue[],
 ): Promise<void> {
 	const url = webhookUrl.trim();
-	if (!url || issues.length === 0) {
+	const externalIssues = issues.filter(isExternalIssue);
+	if (!url || externalIssues.length === 0) {
 		return;
 	}
 
@@ -57,7 +60,7 @@ export async function sendFeishuNewIssueNotification(
 		method: 'POST',
 		contentType: 'application/json',
 		headers: {'Content-Type': 'application/json'},
-		body: JSON.stringify(buildFeishuNewIssuePayload(issues)),
+		body: JSON.stringify(buildFeishuNewIssuePayload(externalIssues)),
 		throw: false,
 	});
 
@@ -68,4 +71,8 @@ export async function sendFeishuNewIssueNotification(
 	if (typeof response.json?.code === 'number' && response.json.code !== 0) {
 		throw new Error(`Feishu webhook rejected the message (${response.json.code})`);
 	}
+}
+
+function isExternalIssue(issue: Pick<NewIssue, 'authorType'>) {
+	return issue.authorType === 'external';
 }

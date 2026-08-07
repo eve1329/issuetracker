@@ -3,6 +3,7 @@ import {buildIssueKey, deduplicateIssues} from '../Issues/issue-scope';
 
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE = '已收到，感谢反馈，我们会尽快跟进。';
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS = 24;
+export const INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION = 2;
 
 export function buildInternalIssueAutoReplyMarker(issueKey: string) {
 	return `<!-- issuetracker-auto-reply:${issueKey} -->`;
@@ -20,6 +21,7 @@ export interface InternalIssueAutoReplyCandidate {
 	webUrl: string;
 	authorName: string;
 	authorUsername: string;
+	createdAt: string;
 	firstResponseAt: string;
 }
 
@@ -28,8 +30,9 @@ export interface InternalIssueAutoReplyDeliveryRecord {
 }
 
 export interface InternalIssueAutoReplyState {
+	trackingVersion: number;
 	initialized: boolean;
-	observedFirstResponseIssueKeys: string[];
+	observedUnansweredIssueKeys: string[];
 	pendingIssues: InternalIssueAutoReplyCandidate[];
 	deliveries: Record<string, InternalIssueAutoReplyDeliveryRecord>;
 }
@@ -40,8 +43,9 @@ export function normalizeInternalIssueAutoReplyState(value: unknown): InternalIs
 	}
 
 	const rawState = value as {
+		trackingVersion?: unknown;
 		initialized?: unknown;
-		observedFirstResponseIssueKeys?: unknown;
+		observedUnansweredIssueKeys?: unknown;
 		pendingIssues?: unknown;
 		deliveries?: unknown;
 	};
@@ -50,15 +54,19 @@ export function normalizeInternalIssueAutoReplyState(value: unknown): InternalIs
 	}
 
 	const deliveries = normalizeDeliveries(rawState.deliveries);
+	const trackingVersion = rawState.trackingVersion === INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION
+		? INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION
+		: 1;
 	const pendingIssues = Array.isArray(rawState.pendingIssues)
 		? rawState.pendingIssues
 			.map(normalizeCandidate)
 			.filter((issue): issue is InternalIssueAutoReplyCandidate => issue !== null)
 			.filter((issue) => !deliveries[issue.issueKey])
 		: [];
-	const observedFirstResponseIssueKeys = Array.isArray(rawState.observedFirstResponseIssueKeys)
+	const observedUnansweredIssueKeys = trackingVersion === INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION
+		&& Array.isArray(rawState.observedUnansweredIssueKeys)
 		? Array.from(new Set(
-			rawState.observedFirstResponseIssueKeys
+			rawState.observedUnansweredIssueKeys
 				.filter((issueKey): issueKey is string => typeof issueKey === 'string')
 				.map((issueKey) => issueKey.trim())
 				.filter(Boolean),
@@ -66,8 +74,9 @@ export function normalizeInternalIssueAutoReplyState(value: unknown): InternalIs
 		: [];
 
 	return {
+		trackingVersion,
 		initialized: rawState.initialized,
-		observedFirstResponseIssueKeys,
+		observedUnansweredIssueKeys,
 		pendingIssues: sortCandidates(pendingIssues),
 		deliveries,
 	};
@@ -75,18 +84,71 @@ export function normalizeInternalIssueAutoReplyState(value: unknown): InternalIs
 
 export function buildInternalIssueAutoReplyBaseline(
 	issues: NormalizedIssueNote[],
+	now = new Date().toISOString(),
+	delayHours = DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
 ): InternalIssueAutoReplyState {
-	const observedFirstResponseIssueKeys = Array.from(new Set(
-		deduplicateIssues(issues)
-			.filter((issue) => issue.isInternalAuthor && Boolean(issue.firstResponseAt.trim()))
-			.map(buildIssueKey),
-	)).sort();
+	const baselineCandidates = deduplicateIssues(issues)
+		.filter(isUnansweredInternalOpenIssue);
+	const nowTime = Date.parse(now);
+	const pendingIssues = baselineCandidates
+		.filter((issue) => {
+			const dueAt = getInternalIssueAutoReplyDueAt(issue.createdAt, delayHours);
+			return Boolean(dueAt) && Number.isFinite(nowTime) && Date.parse(dueAt) > nowTime;
+		})
+		.map(toCandidate);
+	const pendingKeys = new Set(pendingIssues.map((issue) => issue.issueKey));
+	const observedUnansweredIssueKeys = baselineCandidates
+		.map(buildIssueKey)
+		.filter((issueKey) => !pendingKeys.has(issueKey))
+		.sort();
 
 	return {
+		trackingVersion: INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION,
 		initialized: true,
-		observedFirstResponseIssueKeys,
-		pendingIssues: [],
+		observedUnansweredIssueKeys,
+		pendingIssues: sortCandidates(pendingIssues),
 		deliveries: {},
+	};
+}
+
+export function migrateInternalIssueAutoReplyState(
+	state: InternalIssueAutoReplyState,
+	issues: NormalizedIssueNote[],
+	now = new Date().toISOString(),
+	delayHours = DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
+): InternalIssueAutoReplyState {
+	if (state.trackingVersion === INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION) {
+		return state;
+	}
+
+	const baseline = buildInternalIssueAutoReplyBaseline(issues, now, delayHours);
+	const currentWeekStart = getCurrentShanghaiWeekStart(now);
+	const pendingByKey = new Map(
+		baseline.pendingIssues
+			.filter((issue) => !state.deliveries[issue.issueKey])
+			.map((issue) => [issue.issueKey, issue]),
+	);
+	if (Number.isFinite(currentWeekStart)) {
+		for (const issue of deduplicateIssues(issues)) {
+			const issueKey = buildIssueKey(issue);
+			if (
+				isUnansweredInternalOpenIssue(issue)
+				&& !state.deliveries[issueKey]
+				&& Date.parse(issue.createdAt) >= currentWeekStart
+			) {
+				pendingByKey.set(issueKey, toCandidate(issue));
+			}
+		}
+	}
+	const pendingIssues = sortCandidates(Array.from(pendingByKey.values()));
+	const pendingIssueKeys = new Set(pendingIssues.map((issue) => issue.issueKey));
+
+	return {
+		...baseline,
+		observedUnansweredIssueKeys: baseline.observedUnansweredIssueKeys
+			.filter((issueKey) => !pendingIssueKeys.has(issueKey)),
+		pendingIssues,
+		deliveries: {...state.deliveries},
 	};
 }
 
@@ -98,30 +160,35 @@ export function queueInternalIssueAutoReplies(
 		return buildInternalIssueAutoReplyBaseline(issues);
 	}
 
-	const observedFirstResponseIssueKeys = new Set(state.observedFirstResponseIssueKeys);
+	const observedUnansweredIssueKeys = new Set(state.observedUnansweredIssueKeys);
+	const candidatesByKey = new Map(
+		deduplicateIssues(issues)
+			.filter(isUnansweredInternalOpenIssue)
+			.map((issue) => [buildIssueKey(issue), toCandidate(issue)]),
+	);
 	const pendingByKey = new Map(
 		state.pendingIssues
-			.filter((issue) => !state.deliveries[issue.issueKey])
+			.filter((issue) => !state.deliveries[issue.issueKey] && candidatesByKey.has(issue.issueKey))
 			.map((issue) => [issue.issueKey, issue]),
 	);
 
-	for (const issue of deduplicateIssues(issues)) {
-		if (!issue.isInternalAuthor || !issue.firstResponseAt.trim()) {
+	for (const [issueKey, candidate] of candidatesByKey) {
+		if (
+			observedUnansweredIssueKeys.has(issueKey)
+			|| state.deliveries[issueKey]
+			|| pendingByKey.has(issueKey)
+		) {
 			continue;
 		}
 
-		const issueKey = buildIssueKey(issue);
-		if (observedFirstResponseIssueKeys.has(issueKey) || state.deliveries[issueKey]) {
-			continue;
-		}
-
-		observedFirstResponseIssueKeys.add(issueKey);
-		pendingByKey.set(issueKey, toCandidate(issue));
+		observedUnansweredIssueKeys.add(issueKey);
+		pendingByKey.set(issueKey, candidate);
 	}
 
 	return {
+		trackingVersion: INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION,
 		initialized: true,
-		observedFirstResponseIssueKeys: Array.from(observedFirstResponseIssueKeys).sort(),
+		observedUnansweredIssueKeys: Array.from(observedUnansweredIssueKeys).sort(),
 		pendingIssues: sortCandidates(Array.from(pendingByKey.values())),
 		deliveries: {...state.deliveries},
 	};
@@ -138,19 +205,19 @@ export function findPendingInternalIssueAutoReplies(
 	}
 
 	return state.pendingIssues.filter((issue) => {
-		const dueAt = getInternalIssueAutoReplyDueAt(issue.firstResponseAt, delayHours);
+		const dueAt = getInternalIssueAutoReplyDueAt(issue.createdAt, delayHours);
 		return Boolean(dueAt) && Date.parse(dueAt) <= nowTime;
 	});
 }
 
-export function getInternalIssueAutoReplyDueAt(firstResponseAt: string, delayHours: unknown) {
-	const firstResponseTime = Date.parse(firstResponseAt);
-	if (!Number.isFinite(firstResponseTime)) {
+export function getInternalIssueAutoReplyDueAt(createdAt: string, delayHours: unknown) {
+	const createdTime = Date.parse(createdAt);
+	if (!Number.isFinite(createdTime)) {
 		return '';
 	}
 
 	const normalizedDelayHours = normalizeInternalIssueAutoReplyDelayHours(delayHours);
-	return new Date(firstResponseTime + normalizedDelayHours * 60 * 60 * 1000).toISOString();
+	return new Date(createdTime + normalizedDelayHours * 60 * 60 * 1000).toISOString();
 }
 
 export function normalizeInternalIssueAutoReplyDelayHours(value: unknown) {
@@ -185,7 +252,7 @@ export function markInternalIssueAutoRepliesDelivered(
 
 export function formatInternalIssueAutoReply(
 	template: string,
-	issue: Pick<InternalIssueAutoReplyCandidate, 'sourceRepo' | 'iid' | 'title' | 'webUrl' | 'authorName' | 'authorUsername' | 'firstResponseAt'>,
+	issue: Pick<InternalIssueAutoReplyCandidate, 'sourceRepo' | 'iid' | 'title' | 'webUrl' | 'authorName' | 'authorUsername' | 'createdAt' | 'firstResponseAt'>,
 ): string {
 	const content = template.trim() || DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE;
 	const replacements: Record<string, string> = {
@@ -195,6 +262,7 @@ export function formatInternalIssueAutoReply(
 		url: issue.webUrl,
 		author: issue.authorName || issue.authorUsername,
 		authorUsername: issue.authorUsername,
+		createdAt: issue.createdAt,
 		firstResponseAt: issue.firstResponseAt,
 	};
 
@@ -212,6 +280,7 @@ function toCandidate(issue: NormalizedIssueNote): InternalIssueAutoReplyCandidat
 		webUrl: issue.webUrl,
 		authorName: issue.authorName,
 		authorUsername: issue.authorUsername,
+		createdAt: issue.createdAt,
 		firstResponseAt: issue.firstResponseAt,
 	};
 }
@@ -229,6 +298,7 @@ function normalizeCandidate(value: unknown): InternalIssueAutoReplyCandidate | n
 		|| typeof issue.webUrl !== 'string'
 		|| typeof issue.authorName !== 'string'
 		|| typeof issue.authorUsername !== 'string'
+		|| typeof issue.createdAt !== 'string'
 		|| typeof issue.firstResponseAt !== 'string') {
 		return null;
 	}
@@ -241,6 +311,7 @@ function normalizeCandidate(value: unknown): InternalIssueAutoReplyCandidate | n
 		webUrl: issue.webUrl,
 		authorName: issue.authorName,
 		authorUsername: issue.authorUsername,
+		createdAt: issue.createdAt,
 		firstResponseAt: issue.firstResponseAt,
 	};
 }
@@ -267,4 +338,26 @@ function normalizeDeliveries(value: unknown): Record<string, InternalIssueAutoRe
 
 function sortCandidates(candidates: InternalIssueAutoReplyCandidate[]) {
 	return candidates.sort((left, right) => left.issueKey.localeCompare(right.issueKey));
+}
+
+function isUnansweredInternalOpenIssue(issue: NormalizedIssueNote) {
+	return issue.isInternalAuthor
+		&& ['open', 'opened'].includes(issue.state.trim().toLowerCase())
+		&& !issue.firstResponseAt.trim();
+}
+
+function getCurrentShanghaiWeekStart(now: string) {
+	const nowTime = Date.parse(now);
+	if (!Number.isFinite(nowTime)) {
+		return Number.NaN;
+	}
+
+	// Asia/Shanghai has a fixed UTC+08:00 offset for all supported Issue dates.
+	const shanghaiTime = new Date(nowTime + 8 * 60 * 60 * 1000);
+	const daysSinceMonday = (shanghaiTime.getUTCDay() + 6) % 7;
+	return Date.UTC(
+		shanghaiTime.getUTCFullYear(),
+		shanghaiTime.getUTCMonth(),
+		shanghaiTime.getUTCDate() - daysSinceMonday,
+	) - 8 * 60 * 60 * 1000;
 }

@@ -1,12 +1,14 @@
 import {NormalizedIssueNote} from '../../src/Issues/issue-note';
 import {
+	appendInternalIssueAutoReplyMarker,
 	buildInternalIssueAutoReplyBaseline,
 	buildInternalIssueAutoReplyMarker,
-	appendInternalIssueAutoReplyMarker,
 	findPendingInternalIssueAutoReplies,
 	formatInternalIssueAutoReply,
 	getInternalIssueAutoReplyDueAt,
+	INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION,
 	markInternalIssueAutoRepliesDelivered,
+	migrateInternalIssueAutoReplyState,
 	normalizeInternalIssueAutoReplyState,
 	queueInternalIssueAutoReplies,
 } from '../../src/Notifications/internal-issue-auto-reply';
@@ -40,46 +42,110 @@ function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssu
 }
 
 describe('internal Issue auto-reply state', () => {
-	it('establishes a silent baseline and only queues later internal first responses', () => {
-		const existingInternal = makeIssue({firstResponseAt: '2026-08-06T02:00:00.000Z'});
-		const baseline = buildInternalIssueAutoReplyBaseline([existingInternal]);
+	it('baselines historical overdue Issues but tracks in-flight and newly discovered unanswered Issues', () => {
+		const historicalOverdue = makeIssue({
+			createdAt: '2026-08-04T01:00:00.000Z',
+		});
+		const inFlight = makeIssue({
+			iid: 2,
+			title: '尚未到期的内部问题',
+			createdAt: '2026-08-06T02:30:00.000Z',
+			webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/2',
+			referencesFull: 'CPF-KMP-CMP/repo-a#2',
+		});
+		const baseline = buildInternalIssueAutoReplyBaseline(
+			[historicalOverdue, inFlight],
+			'2026-08-06T03:00:00.000Z',
+			24,
+		);
 
-		const queued = queueInternalIssueAutoReplies(baseline, [
-			makeIssue({iid: 1, firstResponseAt: existingInternal.firstResponseAt}),
-			makeIssue({
-				iid: 2,
-				title: '后来出现的内部问题',
-				webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/2',
-				referencesFull: 'CPF-KMP-CMP/repo-a#2',
-				firstResponseAt: '2026-08-06T03:00:00.000Z',
-			}),
-			makeIssue({
-				iid: 3,
-				title: '外部问题',
-				webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/3',
-				referencesFull: 'CPF-KMP-CMP/repo-a#3',
-				authorUsername: 'partner_a',
-				authorName: '外部用户',
-				isInternalAuthor: false,
-				internalMatchedBy: 'none',
-				firstResponseAt: '2026-08-06T03:00:00.000Z',
-			}),
-		]);
+		expect(baseline).toEqual(expect.objectContaining({
+			trackingVersion: INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION,
+			observedUnansweredIssueKeys: ['CPF-KMP-CMP/repo-a#1'],
+			pendingIssues: [expect.objectContaining({
+				issueKey: 'CPF-KMP-CMP/repo-a#2',
+				createdAt: inFlight.createdAt,
+			})],
+		}));
 
-		expect(getInternalIssueAutoReplyDueAt('2026-08-06T03:00:00.000Z', 24)).toBe('2026-08-07T03:00:00.000Z');
-		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-07T02:59:59.999Z', 24)).toEqual([]);
-		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-07T03:00:00.000Z', 24)).toEqual([
+		const newlyDiscovered = makeIssue({
+			iid: 3,
+			title: '后来发现的内部问题',
+			createdAt: '2026-08-06T02:45:00.000Z',
+			webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/3',
+			referencesFull: 'CPF-KMP-CMP/repo-a#3',
+		});
+		const queued = queueInternalIssueAutoReplies(baseline, [historicalOverdue, inFlight, newlyDiscovered]);
+
+		expect(getInternalIssueAutoReplyDueAt(inFlight.createdAt, 24)).toBe('2026-08-07T02:30:00.000Z');
+		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-07T02:44:59.999Z', 24)).toEqual([
 			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#2', iid: 2}),
 		]);
-		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-06T03:00:00.000Z', 0)).toEqual([
+		expect(findPendingInternalIssueAutoReplies(queued, '2026-08-07T02:45:00.000Z', 24)).toEqual([
 			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#2', iid: 2}),
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#3', iid: 3}),
 		]);
 	});
 
-	it('keeps a failed candidate pending and records successful delivery once', () => {
-		const issue = makeIssue({firstResponseAt: '2026-08-06T03:00:00.000Z'});
+	it('stops tracking a pending Issue when it is closed or receives a non-author response', () => {
+		const issue = makeIssue();
 		const queued = queueInternalIssueAutoReplies(
-			buildInternalIssueAutoReplyBaseline([]),
+			buildInternalIssueAutoReplyBaseline([], '2026-08-06T01:00:00.000Z', 24),
+			[issue],
+		);
+
+		expect(queueInternalIssueAutoReplies(queued, [
+			{...issue, firstResponseAt: '2026-08-06T02:00:00.000Z'},
+		])).toEqual(expect.objectContaining({pendingIssues: []}));
+		expect(queueInternalIssueAutoReplies(queued, [
+			{...issue, state: 'closed'},
+		])).toEqual(expect.objectContaining({pendingIssues: []}));
+	});
+
+	it('migrates current-week unanswered Issues without replaying older overdue history and preserves deliveries', () => {
+		const legacyState = normalizeInternalIssueAutoReplyState({
+			initialized: true,
+			observedFirstResponseIssueKeys: ['CPF-KMP-CMP/repo-a#1'],
+			pendingIssues: [],
+			deliveries: {
+				'CPF-KMP-CMP/repo-a#99': {deliveredAt: '2026-08-05T01:00:00.000Z'},
+			},
+		});
+		const historicalOverdue = makeIssue({createdAt: '2026-07-28T01:00:00.000Z'});
+		const currentWeekOverdue = makeIssue({
+			iid: 2,
+			createdAt: '2026-08-04T01:00:00.000Z',
+			webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/2',
+			referencesFull: 'CPF-KMP-CMP/repo-a#2',
+		});
+		const inFlight = makeIssue({
+			iid: 3,
+			createdAt: '2026-08-06T02:30:00.000Z',
+			webUrl: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/3',
+			referencesFull: 'CPF-KMP-CMP/repo-a#3',
+		});
+
+		expect(legacyState).toEqual(expect.objectContaining({trackingVersion: 1}));
+		expect(migrateInternalIssueAutoReplyState(
+			legacyState!,
+			[historicalOverdue, currentWeekOverdue, inFlight],
+			'2026-08-06T03:00:00.000Z',
+			24,
+		)).toEqual(expect.objectContaining({
+			trackingVersion: INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION,
+			observedUnansweredIssueKeys: ['CPF-KMP-CMP/repo-a#1'],
+			pendingIssues: [
+				expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#2'}),
+				expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#3'}),
+			],
+			deliveries: {'CPF-KMP-CMP/repo-a#99': {deliveredAt: '2026-08-05T01:00:00.000Z'}},
+		}));
+	});
+
+	it('keeps a failed candidate pending and records successful delivery once', () => {
+		const issue = makeIssue();
+		const queued = queueInternalIssueAutoReplies(
+			buildInternalIssueAutoReplyBaseline([], '2026-08-06T01:00:00.000Z', 24),
 			[issue],
 		);
 		const delivered = markInternalIssueAutoRepliesDelivered(
@@ -95,10 +161,10 @@ describe('internal Issue auto-reply state', () => {
 	});
 
 	it('formats supported placeholders without changing unknown placeholders', () => {
-		const issue = makeIssue({firstResponseAt: '2026-08-06T03:00:00.000Z'});
+		const issue = makeIssue();
 
 		expect(formatInternalIssueAutoReply(
-			'{{author}} {{repo}}#{{iid}} {{title}} {{url}} {{authorUsername}} {{firstResponseAt}} {{unknown}}',
+			'{{author}} {{repo}}#{{iid}} {{title}} {{url}} {{authorUsername}} {{createdAt}} {{unknown}}',
 			{
 				sourceRepo: issue.sourceRepo,
 				iid: issue.iid,
@@ -106,9 +172,10 @@ describe('internal Issue auto-reply state', () => {
 				webUrl: issue.webUrl,
 				authorName: issue.authorName,
 				authorUsername: issue.authorUsername,
+				createdAt: issue.createdAt,
 				firstResponseAt: issue.firstResponseAt,
 			},
-		)).toBe('开发甲 repo-a#1 内部问题 https://gitcode.com/CPF-KMP-CMP/repo-a/issues/1 dev_a 2026-08-06T03:00:00.000Z {{unknown}}');
+		)).toBe('开发甲 repo-a#1 内部问题 https://gitcode.com/CPF-KMP-CMP/repo-a/issues/1 dev_a 2026-08-06T01:00:00.000Z {{unknown}}');
 		expect(buildInternalIssueAutoReplyMarker('repo-a#1')).toBe('<!-- issuetracker-auto-reply:repo-a#1 -->');
 		expect(appendInternalIssueAutoReplyMarker('已收到', 'repo-a#1')).toBe(
 			'已收到\n\n<!-- issuetracker-auto-reply:repo-a#1 -->',
@@ -118,10 +185,11 @@ describe('internal Issue auto-reply state', () => {
 	it('rejects malformed persisted state', () => {
 		expect(normalizeInternalIssueAutoReplyState({initialized: 'yes'})).toBeNull();
 		expect(normalizeInternalIssueAutoReplyState({initialized: true})).toEqual({
-		initialized: true,
-		observedFirstResponseIssueKeys: [],
-		pendingIssues: [],
-		deliveries: {},
-	});
+			trackingVersion: 1,
+			initialized: true,
+			observedUnansweredIssueKeys: [],
+			pendingIssues: [],
+			deliveries: {},
+		});
 	});
 });

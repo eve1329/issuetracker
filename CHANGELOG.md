@@ -2,6 +2,16 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.14 - 2026-08-07
+
+- Send Feishu notifications only for new external Issues. Internal Issues are excluded from new and legacy pending Feishu delivery queues.
+- Reply once to an internal Issue that remains open without a non-author comment after the configured delay from its creation time.
+- Migrate prior first-response reply state by queueing this week's unanswered internal Issues while keeping older overdue history suppressed.
+
+## 0.2.13 - 2026-08-07
+
+- Fix GitCode internal Issue auto-replies by sending the required form-encoded comment body.
+
 ## 0.2.12 - 2026-08-06
 
 - Make the internal Issue auto-reply delay configurable in hours, defaulting to 24 hours from the first non-author comment and allowing `0` for the next successful sync.

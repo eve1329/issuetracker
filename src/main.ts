@@ -221,9 +221,6 @@ export default class GitlabIssuesPlugin extends Plugin {
 				await sendFeishuNewIssueNotification(this.settings.feishuWebhookUrl, batch);
 				await this.markFeishuIssuesDelivered(batch);
 			}
-			if (result.sameDayInternalFeishuBackfillIssues.length > 0) {
-				new Notice(`飞书已补发 ${result.sameDayInternalFeishuBackfillIssues.length} 条当天内部 Issue。`, 10_000);
-			}
 		} catch (error) {
 			const message = `飞书 Issue 投递或投递记录保存失败：${error instanceof Error ? error.message : String(error)}`;
 			logger(message);
@@ -238,8 +235,9 @@ export default class GitlabIssuesPlugin extends Plugin {
 
 		const loader = new GitlabLoader(this.app, this.settings);
 		let deliveredCount = 0;
-		try {
-			for (const issue of issues) {
+		const failures: string[] = [];
+		for (const issue of issues) {
+			try {
 				const body = formatInternalIssueAutoReply(this.settings.internalIssueAutoReplyTemplate, issue);
 				const marker = buildInternalIssueAutoReplyMarker(issue.issueKey);
 				if (!await loader.hasIssueCommentContaining(issue.sourceRepo, issue.iid, marker)) {
@@ -251,12 +249,21 @@ export default class GitlabIssuesPlugin extends Plugin {
 				}
 				await this.markInternalIssueAutoRepliesDelivered([issue]);
 				deliveredCount += 1;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				failures.push(`${issue.issueKey}: ${message}`);
+				logger(`内部 Issue 自动回复失败（${issue.issueKey}）：${message}`);
 			}
+		}
+
+		if (deliveredCount > 0) {
 			new Notice(`已自动回复 ${deliveredCount} 条内部 Issue。`, 10_000);
-		} catch (error) {
-			const message = `内部 Issue 自动回复失败，未成功的项目会在下次同步重试：${error instanceof Error ? error.message : String(error)}`;
-			logger(message);
-			new Notice(message, 10_000);
+		}
+		if (failures.length > 0) {
+			new Notice(
+				`内部 Issue 自动回复失败 ${failures.length} 条，后续同步会重试：${failures.join('；')}`,
+				10_000,
+			);
 		}
 	}
 

@@ -349,7 +349,6 @@ describe('SyncService', () => {
 			ledgerWriteFailed: false,
 			newIssues: [],
 			pendingFeishuIssues: [],
-			sameDayInternalFeishuBackfillIssues: [],
 		});
 	});
 
@@ -429,13 +428,26 @@ describe('SyncService', () => {
 				? {seenIssueKeys: ['CPF-KMP-CMP/repo-a#78']}
 				: null
 		));
-		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({iid: 79})]);
+		mockLoadRepoIssues.mockResolvedValueOnce([
+			makeIssue({iid: 79}),
+			makeIssue({
+				iid: 80,
+				author: {
+					avatar_url: '', id: 2, locked: false, name: 'Developer A', state: 'active', username: 'dev_a', web_url: '',
+				},
+				references: {short: '#80', relative: '#80', full: 'CPF-KMP-CMP/repo-a#80'},
+				web_url: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/80',
+			}),
+		]);
 
 		const result = await new SyncService(mockApp, settings).run();
 
 		expect(result.pendingFeishuIssues).toEqual([
 			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#79'}),
 		]);
+		expect(result.pendingFeishuIssues).not.toEqual(
+			expect.arrayContaining([expect.objectContaining({authorType: 'internal'})]),
+		);
 		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/issue-notification-state.json',
 			expect.objectContaining({
@@ -447,33 +459,11 @@ describe('SyncService', () => {
 		);
 	});
 
-	it('automatically queues same-day internal Issues that were seen before delivery tracking existed', async () => {
-		const settings = makeSettings({generateDailyReports: false, feishuWebhookUrl: 'https://example.test/hook'});
-		mockReadJson.mockImplementation(async (path: string) => (
-			path === 'GitCode Issues/meta/issue-notification-state.json'
-				? {seenIssueKeys: ['CPF-KMP-CMP/repo-a#78']}
-				: null
-		));
-		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({
-			author: {
-				avatar_url: '', id: 2, locked: false, name: 'Developer A', state: 'active', username: 'dev_a', web_url: '',
-			},
-		})]);
-
-		const result = await new SyncService(mockApp, settings).run();
-
-		expect(result.newIssues).toEqual([]);
-		expect(result.sameDayInternalFeishuBackfillIssues).toEqual([
-			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#78', authorType: 'internal'}),
-		]);
-		expect(result.pendingFeishuIssues).toEqual(result.sameDayInternalFeishuBackfillIssues);
-	});
-
-	it('baselines existing internal Issues, then queues a newly detected first response once', async () => {
+	it('tracks an unanswered internal Issue from creation and returns it after the configured delay', async () => {
 		const settings = makeSettings({
 			generateDailyReports: false,
 			internalIssueAutoReplyEnabled: true,
-			internalIssueAutoReplyDelayHours: 0,
+			internalIssueAutoReplyDelayHours: 24,
 		});
 		const internalIssue = makeIssue({
 			author: {
@@ -493,11 +483,14 @@ describe('SyncService', () => {
 
 		expect(baselineResult.pendingInternalAutoReplyIssues).toEqual([]);
 		autoReplyState = mockWriteJson.mock.calls.find(([path]) => path === 'GitCode Issues/meta/internal-issue-auto-reply-state.json')?.[1];
-		expect(autoReplyState).toEqual(expect.objectContaining({initialized: true, pendingIssues: []}));
+		expect(autoReplyState).toEqual(expect.objectContaining({
+			initialized: true,
+			pendingIssues: [expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#78'})],
+		}));
 
 		mockWriteJson.mockClear();
 		mockLoadRepoIssues.mockResolvedValueOnce([internalIssue]);
-		mockLoadFirstOtherPersonResponseAt.mockResolvedValueOnce('2026-06-17T10:30:00+08:00');
+		jest.setSystemTime(new Date('2026-06-18T01:12:00.000Z'));
 
 		const queuedResult = await new SyncService(mockApp, settings).run();
 
@@ -505,7 +498,7 @@ describe('SyncService', () => {
 			expect.objectContaining({
 				issueKey: 'CPF-KMP-CMP/repo-a#78',
 				iid: 78,
-				firstResponseAt: '2026-06-17T10:30:00+08:00',
+				createdAt: '2026-06-17T09:12:00+08:00',
 			}),
 		]);
 		expect(mockWriteJson).toHaveBeenCalledWith(
@@ -537,7 +530,6 @@ describe('SyncService', () => {
 			ledgerWriteFailed: false,
 			newIssues: [],
 			pendingFeishuIssues: [],
-			sameDayInternalFeishuBackfillIssues: [],
 		});
 		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',
@@ -568,7 +560,6 @@ describe('SyncService', () => {
 			ledgerWriteFailed: true,
 			newIssues: [],
 			pendingFeishuIssues: [],
-			sameDayInternalFeishuBackfillIssues: [],
 		});
 	});
 
@@ -672,7 +663,6 @@ describe('SyncService', () => {
 			ledgerWriteFailed: false,
 			newIssues: [],
 			pendingFeishuIssues: [],
-			sameDayInternalFeishuBackfillIssues: [],
 		});
 		expect(mockWriteJson).toHaveBeenCalledWith(
 			'GitCode Issues/meta/sync-state.json',

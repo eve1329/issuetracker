@@ -20,8 +20,8 @@ The current implementation is verified against GitCode and GitLab-style issue AP
 - Generate machine-friendly daily reports and AI-friendly daily briefs.
 - Generate a 13-column native-hyperlink XLSX issue ledger. It records the first non-author, non-system comment timestamp and elapsed response time without storing comment text. A tracked Issue that changes from open to closed is shown with a dark row for that sync; retired CSV output is removed after a successful XLSX refresh.
 - Generate a separate Markdown reminder when tracked Issues close, retaining the current closed-Issue list for follow-up.
-- Notify locally and through an optional Feishu group-bot webhook when internal or external Issues are newly discovered. Feishu delivery is logged only after the webhook accepts it, so a failed or unrecorded delivery remains pending for a later successful sync.
-- Optionally post one configurable reply back to an internal Issue after the first non-author comment is detected and a manually configured delay has elapsed. The delay defaults to 24 hours and can be set to 0 or any other non-negative number of hours. External Issues remain notification-only; the first enablement creates a silent baseline instead of replaying historical comments.
+- Notify locally when internal or external Issues are newly discovered. An optional Feishu group-bot webhook sends newly discovered external Issues only; delivery is logged only after the webhook accepts it, so a failed or unrecorded delivery remains pending for a later successful sync.
+- Optionally post one configurable reply back to an internal Issue after its configured delay from creation, but only if it remains open and has no non-author comment. The delay defaults to 24 hours and can be set to 0 or any other non-negative number of hours. External Issues are never auto-replied; the first enablement creates a silent baseline instead of replaying historical Issues.
 - Persist sync metadata, degraded-sync warnings, and collaborator caches under the configured meta folder.
 
 ### Default Output Layout
@@ -73,10 +73,10 @@ Open the `IssueTracker` settings tab and configure:
 - `Issues Folder`, `Meta Folder`, `Reports Folder`: output locations inside the vault
 - `Generate daily reports`: write daily summaries and AI briefs after sync
 - `Show local notifications for new Issues?`: show an Obsidian notice for newly discovered internal and external Issues; each Issue is labelled with its author type; enabled by default
-- `Feishu Bot Webhook`: optional Feishu group-bot URL. The plugin posts newly discovered internal and external Issues directly from Obsidian, with the author type on every item; successful delivery is recorded per Issue and pending deliveries retry after later successful syncs. Leave empty for local notices only
-- `Automatically reply once to internal Issues after their configured delay?`: opt-in write-back for internal Issue authors only. The first successful run after enabling establishes a silent baseline; failed replies remain pending for a later successful sync.
-- `Internal Issue auto-reply template`: the reply body used once per internal Issue. It supports `{{repo}}`, `{{iid}}`, `{{title}}`, `{{author}}`, `{{authorUsername}}`, `{{url}}`, and `{{firstResponseAt}}`.
-- `Internal Issue auto-reply delay (hours)`: delay measured from the first non-author comment before the reply becomes eligible. It defaults to `24`; use `0` for the next successful sync.
+- `Feishu Bot Webhook`: optional Feishu group-bot URL. The plugin posts newly discovered external Issues only; successful delivery is recorded per Issue and pending deliveries retry after later successful syncs. Leave empty for local notices only
+- `Automatically reply once to internal Issues after their configured delay?`: opt-in write-back for internal Issue authors only. After creation plus the configured delay, the Issue is replied to only if it remains open and has no non-author comment. The first successful run after enabling establishes a silent baseline; failed replies remain pending for a later successful sync.
+- `Internal Issue auto-reply template`: the reply body used once per eligible internal Issue. It supports `{{repo}}`, `{{iid}}`, `{{title}}`, `{{author}}`, `{{authorUsername}}`, `{{url}}`, and `{{createdAt}}`.
+- `Internal Issue auto-reply delay (hours)`: delay measured from Issue creation before the reply becomes eligible. It defaults to `24`; use `0` for the next successful sync.
 
 The settings page still keeps a legacy API-scope compatibility section from the original importer code path. The primary workflow in this fork is the repository sync path described above.
 
@@ -86,8 +86,8 @@ The settings page still keeps a legacy API-scope compatibility section from the 
 - Or run the command palette action `Sync IssueTracker`.
 - If `Refresh issues on startup` is enabled, the plugin waits 30 seconds after launch before the first automatic sync.
 - Automatic refresh runs every 15 minutes by default.
-- The first successful sync silently records the current Issue set. Later successful syncs notify for newly discovered internal and external Issues; failed or degraded syncs do not advance the notification baseline. A Feishu delivery is removed from the pending queue only after the webhook responds successfully. On the first delivery-aware sync, same-day internal Issues that were already seen but have no delivery record are directly backfilled; older history is not replayed. Overlapping triggers share one in-progress sync so they cannot duplicate progress notices or compete to write the same generated files.
-- When internal auto-reply is enabled, the first successful run silently records already-observed internal first responses. Later successful syncs queue each newly detected internal first response and post the configured reply once after the configured delay has elapsed; failed write-backs remain pending. External Issues continue through the local/Feishu reminder path and are never auto-replied.
+- The first successful sync silently records the current Issue set. Later successful syncs notify for newly discovered internal and external Issues; Feishu delivers newly discovered external Issues only. Failed or degraded syncs do not advance the notification baseline, and an external Issue is removed from the Feishu pending queue only after the webhook responds successfully. Overlapping triggers share one in-progress sync so they cannot duplicate progress notices or compete to write the same generated files.
+- When internal auto-reply is enabled, the first successful run silently establishes a baseline. Later successful syncs queue newly discovered internal Issues that remain open without a non-author comment, then post the configured reply once when their creation time plus the configured delay is due; failed write-backs remain pending. External Issues are never auto-replied.
 
 ### Generated Data
 
@@ -147,8 +147,8 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 生成便于机器处理的日报，以及适合 AI 消费的日报摘要。
 - 生成 13 列 XLSX issue 台账，使用原生超链接，导入腾讯文档后可直接点击。“首次响应时间”取非 Issue 作者、非系统事件的第一条评论时间，只保留时间元数据，不保存评论正文；已追踪 Issue 从 open 变为 closed 的当次同步会以深色整行标记。Excel 写入成功后会清理已废弃的 CSV 台账。
 - 在已追踪的 issue 关闭时生成独立 Markdown 提醒，并保留当前关闭 issue 列表便于跟进。
-- 对新增内部和外部 Issue 发送本机及可选飞书群机器人提醒。飞书只有在 Webhook 成功接收后才记录为已投递，失败或未记录的投递会在后续成功同步时重试。
-- 可选地在首次检测到内部 Issue 的非作者评论并经过手动配置的延迟后自动回写一条回复；延迟默认 24 小时，也可以设置为 0 或其他非负小时数。外部 Issue 仍以本机和飞书提醒为主，不自动回写。首次开启时会静默建立基线，不会重放历史评论；失败的自动回复会保留到后续成功同步重试。
+- 对新增内部和外部 Issue 发送本机提醒；可选飞书群机器人只发送新增外部 Issue。飞书只有在 Webhook 成功接收后才记录为已投递，失败或未记录的投递会在后续成功同步时重试。
+- 可选地在内部 Issue 创建满设定时长后，若其仍为 open 且没有非作者评论，则自动回写一条回复；延迟默认 24 小时，也可以设置为 0 或其他非负小时数。外部 Issue 不自动回写。首次开启时会静默建立基线，不会重放历史评论；失败的自动回复会保留到后续成功同步重试。
 - 将同步元数据、降级同步告警和协作者缓存保存到配置的 meta 目录。
 
 ### 默认输出结构
@@ -200,10 +200,10 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - `Issues Folder`、`Meta Folder`、`Reports Folder`：vault 内的输出目录
 - `Generate daily reports`：同步完成后生成日报和 AI 摘要
 - `新增 Issue 时本机提醒？`：默认开启；对新增的内部和外部 Issue 显示 Obsidian 提示，并标明类型
-- `飞书群机器人 Webhook`：可选的飞书群机器人地址。插件会从 Obsidian 直接发送本次新增的内部和外部 Issue，并在每条中标明类型；每条成功投递都会记录，未成功投递会在后续成功同步时重试；留空则只保留本机提示
-- `内部 Issue 在设定延迟后自动回复一次？`：仅对内部 Issue 开启一次性写回；首次成功同步会静默建立已有首次响应基线。
-- `内部 Issue 自动回复模板`：自动回复正文，支持 `{{repo}}`、`{{iid}}`、`{{title}}`、`{{author}}`、`{{authorUsername}}`、`{{url}}`、`{{firstResponseAt}}` 占位符。
-- `内部 Issue 自动回复延迟（小时）`：从首次检测到非作者评论开始计时，默认 `24` 小时；填 `0` 表示下一次成功同步即可回复。
+- `飞书群机器人 Webhook`：可选的飞书群机器人地址。插件只会从 Obsidian 直接发送本次新增的外部 Issue；每条成功投递都会记录，未成功投递会在后续成功同步时重试；留空则只保留本机提示
+- `内部 Issue 在设定延迟后自动回复一次？`：仅对内部 Issue 开启一次性写回；Issue 创建满设定时长后，只有仍为 open 且没有非作者评论时才会回复。
+- `内部 Issue 自动回复模板`：自动回复正文，支持 `{{repo}}`、`{{iid}}`、`{{title}}`、`{{author}}`、`{{authorUsername}}`、`{{url}}`、`{{createdAt}}` 占位符。
+- `内部 Issue 自动回复延迟（小时）`：从 Issue 创建时间开始计时，默认 `24` 小时；填 `0` 表示下一次成功同步即可回复。
 
 设置页里仍保留了原始导入器路径中的旧 API scope 兼容区块。这个分支当前的主要工作流是上面这套仓库同步模型。
 
@@ -213,8 +213,8 @@ IssueTracker 是一个本地 Obsidian 插件工作区，用来把 Git 代码托�
 - 或者在命令面板里执行 `Sync IssueTracker`。
 - 如果启用了 `Refresh issues on startup`，插件会在 Obsidian 启动 30 秒后执行第一次自动同步。
 - 默认情况下，自动刷新每 15 分钟执行一次。
-- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步会提醒新增的内部和外部 Issue，并标明类型。飞书只有在 Webhook 成功接收后才从待投递队列移除，失败会在后续成功同步时重试。首次启用投递记录时，当天已同步但未记录投递的内部 Issue 会直接补发，较早历史不会重放。失败或降级同步不会推进通知基线。重叠的同步触发会复用同一次运行，避免重复进度条和对同一生成文件的竞争写入。
-- 开启内部自动回复后，第一次成功同步会静默记录已有的内部首次响应；后续成功同步在首次检测到新的内部非作者评论后进入待处理队列，等配置的延迟到期才只回复一次，失败会保留到待处理队列。外部 Issue 继续只走本机和飞书提醒，不会自动回写。
+- 第一次成功同步只会静默记录当前 Issue 集合；之后的成功同步会提醒新增的内部和外部 Issue，并标明类型。飞书仅投递新增外部 Issue，成功后才从待投递队列移除，失败会在后续成功同步时重试。失败或降级同步不会推进通知基线。重叠的同步触发会复用同一次运行，避免重复进度条和对同一生成文件的竞争写入。
+- 开启内部自动回复后，第一次成功同步会静默建立基线；后续成功同步仅将新发现的内部、open、无非作者评论 Issue 进入待处理队列，在创建时间加上配置延迟到期后只回复一次，失败会保留到待处理队列。外部 Issue 不会自动回写。
 
 ### 生成的数据
 

@@ -23,7 +23,6 @@ export interface FeishuDeliveryRecord {
 export interface FeishuDeliveryState {
 	pendingIssues: NewIssue[];
 	deliveries: Record<string, FeishuDeliveryRecord>;
-	sameDayInternalBackfillCheckedAt?: string;
 }
 
 export interface IssueNotificationState {
@@ -89,17 +88,16 @@ export function findNewIssues(
 export function queueFeishuIssueDeliveries(
 	state: IssueNotificationState,
 	issues: NewIssue[],
-	sameDayInternalBackfillCheckedAt?: string,
 ): IssueNotificationState {
 	const previousDelivery = state.feishuDelivery ?? {pendingIssues: [], deliveries: {}};
 	const pendingByKey = new Map(
 		previousDelivery.pendingIssues
-			.filter((issue) => !previousDelivery.deliveries[issue.issueKey])
+			.filter((issue) => isExternalIssue(issue) && !previousDelivery.deliveries[issue.issueKey])
 			.map((issue) => [issue.issueKey, issue]),
 	);
 
 	for (const issue of issues) {
-		if (!previousDelivery.deliveries[issue.issueKey]) {
+		if (isExternalIssue(issue) && !previousDelivery.deliveries[issue.issueKey]) {
 			pendingByKey.set(issue.issueKey, issue);
 		}
 	}
@@ -109,17 +107,12 @@ export function queueFeishuIssueDeliveries(
 		feishuDelivery: {
 			pendingIssues: Array.from(pendingByKey.values()).sort((left, right) => left.issueKey.localeCompare(right.issueKey)),
 			deliveries: {...previousDelivery.deliveries},
-			...(sameDayInternalBackfillCheckedAt
-				? {sameDayInternalBackfillCheckedAt}
-				: previousDelivery.sameDayInternalBackfillCheckedAt
-					? {sameDayInternalBackfillCheckedAt: previousDelivery.sameDayInternalBackfillCheckedAt}
-					: {}),
 		},
 	};
 }
 
 export function findPendingFeishuIssues(state: IssueNotificationState): NewIssue[] {
-	return state.feishuDelivery?.pendingIssues ?? [];
+	return (state.feishuDelivery?.pendingIssues ?? []).filter(isExternalIssue);
 }
 
 export function markFeishuIssuesDelivered(
@@ -128,9 +121,10 @@ export function markFeishuIssuesDelivered(
 	deliveredAt: string,
 ): IssueNotificationState {
 	const previousDelivery = state.feishuDelivery ?? {pendingIssues: [], deliveries: {}};
-	const deliveredKeys = new Set(issues.map((issue) => issue.issueKey));
+	const deliveredIssues = issues.filter(isExternalIssue);
+	const deliveredKeys = new Set(deliveredIssues.map((issue) => issue.issueKey));
 	const deliveries = {...previousDelivery.deliveries};
-	for (const issue of issues) {
+	for (const issue of deliveredIssues) {
 		deliveries[issue.issueKey] = {deliveredAt, authorType: issue.authorType};
 	}
 
@@ -142,23 +136,6 @@ export function markFeishuIssuesDelivered(
 			pendingIssues: previousDelivery.pendingIssues.filter((issue) => !deliveredKeys.has(issue.issueKey)),
 		},
 	};
-}
-
-export function findSameDayInternalFeishuBackfillIssues(
-	issues: NormalizedIssueNote[],
-	state: IssueNotificationState | null,
-	now: string,
-): NewIssue[] {
-	if (!state || state.feishuDelivery?.sameDayInternalBackfillCheckedAt) {
-		return [];
-	}
-
-	const seenIssueKeys = new Set(state.seenIssueKeys);
-	return deduplicateIssues(issues)
-		.filter((issue) => issue.isInternalAuthor
-			&& seenIssueKeys.has(buildIssueKey(issue))
-			&& isSameLocalDay(issue.createdAt, now))
-		.map(toNewIssue);
 }
 
 export function formatIssueAuthorType(issue: Pick<NewIssue, 'authorType'>) {
@@ -189,18 +166,15 @@ function normalizeFeishuDeliveryState(value: unknown): FeishuDeliveryState | nul
 		return null;
 	}
 
-	const rawState = value as {pendingIssues?: unknown; deliveries?: unknown; sameDayInternalBackfillCheckedAt?: unknown};
+	const rawState = value as {pendingIssues?: unknown; deliveries?: unknown};
 	const pendingIssues = Array.isArray(rawState.pendingIssues)
 		? rawState.pendingIssues.map(normalizeNewIssue).filter((issue): issue is NewIssue => issue !== null)
 		: [];
 	const deliveries = normalizeFeishuDeliveries(rawState.deliveries);
 	const state: FeishuDeliveryState = {
-		pendingIssues: pendingIssues.filter((issue) => !deliveries[issue.issueKey]),
+		pendingIssues: pendingIssues.filter((issue) => isExternalIssue(issue) && !deliveries[issue.issueKey]),
 		deliveries,
 	};
-	if (typeof rawState.sameDayInternalBackfillCheckedAt === 'string' && rawState.sameDayInternalBackfillCheckedAt.trim()) {
-		state.sameDayInternalBackfillCheckedAt = rawState.sameDayInternalBackfillCheckedAt;
-	}
 	return state;
 }
 
@@ -257,22 +231,13 @@ function normalizeFeishuDeliveries(value: unknown): Record<string, FeishuDeliver
 
 function cloneFeishuDeliveryState(state: FeishuDeliveryState): FeishuDeliveryState {
 	return {
-		pendingIssues: [...state.pendingIssues],
+		pendingIssues: state.pendingIssues.filter(isExternalIssue),
 		deliveries: {...state.deliveries},
-		...(state.sameDayInternalBackfillCheckedAt
-			? {sameDayInternalBackfillCheckedAt: state.sameDayInternalBackfillCheckedAt}
-			: {}),
 	};
 }
 
-function isSameLocalDay(left: string, right: string) {
-	const leftDate = new Date(left);
-	const rightDate = new Date(right);
-	return Number.isFinite(leftDate.getTime())
-		&& Number.isFinite(rightDate.getTime())
-		&& leftDate.getFullYear() === rightDate.getFullYear()
-		&& leftDate.getMonth() === rightDate.getMonth()
-		&& leftDate.getDate() === rightDate.getDate();
+function isExternalIssue(issue: Pick<NewIssue, 'authorType'>) {
+	return issue.authorType === 'external';
 }
 
 export function formatLocalNewIssueNotification(issues: NewIssue[]): string {
