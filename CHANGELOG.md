@@ -2,6 +2,10 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.15 - 2026-08-07
+
+- Use the complete internal-Issue decision for new-Issue notifications and internal auto-replies. Titles matching `IR` / `SR` or internal workflow markers such as `门禁测试` and `【bug】` are therefore excluded from Feishu even when the author is not yet in the member directory or whitelist; matching legacy pending deliveries are removed on the next successful sync.
+
 ## 0.2.14 - 2026-08-07
 
 - Send Feishu notifications only for new external Issues. Internal Issues are excluded from new and legacy pending Feishu delivery queues.

@@ -6,6 +6,7 @@ import MemberLoader from "../Members/member-loader";
 import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
 import {InternalMemberIndex} from "../Members/member-types";
 import {classifyIssue, matchInternalAuthor} from "../Classification/classification";
+import {buildKnownInternalUsernameSet, isIssueInternal} from '../Classification/internal-identity';
 import {NormalizedIssueNote} from "../Issues/issue-note";
 import {buildDailyReport, buildDailyReportMarkdown} from "../Reports/daily-report-builder";
 import {buildAiBriefMarkdown} from "../Reports/ai-brief-builder";
@@ -21,6 +22,7 @@ import {
 	NewIssue,
 	normalizeIssueNotificationState,
 	queueFeishuIssueDeliveries,
+	removeInternalFeishuIssueDeliveries,
 } from '../Notifications/new-issue-notifications';
 import {
 	buildInternalIssueAutoReplyBaseline,
@@ -152,6 +154,8 @@ export default class SyncService {
 		this.reportProgress('issues', 12, '正在获取仓库 Issue');
 
 		const normalizedNotes: NormalizedIssueNote[] = [];
+		const knownInternalUsernames = buildKnownInternalUsernameSet(this.settings);
+		const isEffectivelyInternal = (issue: NormalizedIssueNote) => isIssueInternal(issue, knownInternalUsernames);
 		const repoIssueBatches: Array<{repoName: string; issues: Issue[]}> = [];
 		const failedRepos: string[] = [];
 		const failedRepoSet = new Set<string>();
@@ -390,8 +394,13 @@ export default class SyncService {
 				const previousNotificationState = normalizeIssueNotificationState(
 					await this.fs.readJson<unknown>(notificationStatePath),
 				);
-				newIssues = findNewIssues(normalizedNotes, previousNotificationState);
+				newIssues = findNewIssues(normalizedNotes, previousNotificationState, isEffectivelyInternal);
 				nextNotificationState = buildIssueNotificationState(normalizedNotes, previousNotificationState);
+				nextNotificationState = removeInternalFeishuIssueDeliveries(
+					nextNotificationState,
+					normalizedNotes,
+					isEffectivelyInternal,
+				);
 				if (this.settings.feishuWebhookUrl.trim()) {
 					nextNotificationState = queueFeishuIssueDeliveries(
 						nextNotificationState,
@@ -419,17 +428,20 @@ export default class SyncService {
 						normalizedNotes,
 						syncTime,
 						this.settings.internalIssueAutoReplyDelayHours,
+						isEffectivelyInternal,
 					);
 				} else {
-					nextInternalAutoReplyState = queueInternalIssueAutoReplies(
-						migrateInternalIssueAutoReplyState(
-							previousAutoReplyState,
+						nextInternalAutoReplyState = queueInternalIssueAutoReplies(
+							migrateInternalIssueAutoReplyState(
+								previousAutoReplyState,
+								normalizedNotes,
+								syncTime,
+								this.settings.internalIssueAutoReplyDelayHours,
+								isEffectivelyInternal,
+							),
 							normalizedNotes,
-							syncTime,
-							this.settings.internalIssueAutoReplyDelayHours,
-						),
-						normalizedNotes,
-					);
+							isEffectivelyInternal,
+						);
 					pendingInternalAutoReplyIssues = findPendingInternalIssueAutoReplies(
 						nextInternalAutoReplyState,
 						syncTime,

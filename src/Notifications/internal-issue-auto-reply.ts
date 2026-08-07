@@ -1,5 +1,6 @@
 import {NormalizedIssueNote} from '../Issues/issue-note';
 import {buildIssueKey, deduplicateIssues} from '../Issues/issue-scope';
+import {InternalIssuePredicate} from '../Classification/internal-identity';
 
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE = '已收到，感谢反馈，我们会尽快跟进。';
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS = 24;
@@ -86,9 +87,10 @@ export function buildInternalIssueAutoReplyBaseline(
 	issues: NormalizedIssueNote[],
 	now = new Date().toISOString(),
 	delayHours = DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
+	isInternalIssue: InternalIssuePredicate = (issue) => issue.isInternalAuthor,
 ): InternalIssueAutoReplyState {
 	const baselineCandidates = deduplicateIssues(issues)
-		.filter(isUnansweredInternalOpenIssue);
+		.filter((issue) => isUnansweredInternalOpenIssue(issue, isInternalIssue));
 	const nowTime = Date.parse(now);
 	const pendingIssues = baselineCandidates
 		.filter((issue) => {
@@ -116,12 +118,13 @@ export function migrateInternalIssueAutoReplyState(
 	issues: NormalizedIssueNote[],
 	now = new Date().toISOString(),
 	delayHours = DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS,
+	isInternalIssue: InternalIssuePredicate = (issue) => issue.isInternalAuthor,
 ): InternalIssueAutoReplyState {
 	if (state.trackingVersion === INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION) {
 		return state;
 	}
 
-	const baseline = buildInternalIssueAutoReplyBaseline(issues, now, delayHours);
+	const baseline = buildInternalIssueAutoReplyBaseline(issues, now, delayHours, isInternalIssue);
 	const currentWeekStart = getCurrentShanghaiWeekStart(now);
 	const pendingByKey = new Map(
 		baseline.pendingIssues
@@ -132,7 +135,7 @@ export function migrateInternalIssueAutoReplyState(
 		for (const issue of deduplicateIssues(issues)) {
 			const issueKey = buildIssueKey(issue);
 			if (
-				isUnansweredInternalOpenIssue(issue)
+				isUnansweredInternalOpenIssue(issue, isInternalIssue)
 				&& !state.deliveries[issueKey]
 				&& Date.parse(issue.createdAt) >= currentWeekStart
 			) {
@@ -155,15 +158,21 @@ export function migrateInternalIssueAutoReplyState(
 export function queueInternalIssueAutoReplies(
 	state: InternalIssueAutoReplyState,
 	issues: NormalizedIssueNote[],
+	isInternalIssue: InternalIssuePredicate = (issue) => issue.isInternalAuthor,
 ): InternalIssueAutoReplyState {
 	if (!state.initialized) {
-		return buildInternalIssueAutoReplyBaseline(issues);
+		return buildInternalIssueAutoReplyBaseline(
+			issues,
+			undefined,
+			undefined,
+			isInternalIssue,
+		);
 	}
 
 	const observedUnansweredIssueKeys = new Set(state.observedUnansweredIssueKeys);
 	const candidatesByKey = new Map(
 		deduplicateIssues(issues)
-			.filter(isUnansweredInternalOpenIssue)
+			.filter((issue) => isUnansweredInternalOpenIssue(issue, isInternalIssue))
 			.map((issue) => [buildIssueKey(issue), toCandidate(issue)]),
 	);
 	const pendingByKey = new Map(
@@ -340,8 +349,8 @@ function sortCandidates(candidates: InternalIssueAutoReplyCandidate[]) {
 	return candidates.sort((left, right) => left.issueKey.localeCompare(right.issueKey));
 }
 
-function isUnansweredInternalOpenIssue(issue: NormalizedIssueNote) {
-	return issue.isInternalAuthor
+function isUnansweredInternalOpenIssue(issue: NormalizedIssueNote, isInternalIssue: InternalIssuePredicate) {
+	return isInternalIssue(issue)
 		&& ['open', 'opened'].includes(issue.state.trim().toLowerCase())
 		&& !issue.firstResponseAt.trim();
 }

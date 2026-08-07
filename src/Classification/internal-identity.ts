@@ -25,6 +25,8 @@ export interface InternalAuthorEvidence {
 	value: string;
 }
 
+export type InternalIssuePredicate = (issue: NormalizedIssueNote) => boolean;
+
 const DEFAULT_INTERNAL_REFERENCE_PREFIXES = ['IR', 'SR'];
 export const DEFAULT_INTERNAL_TITLE_MARKERS = [
 	'【fix】',

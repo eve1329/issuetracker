@@ -1,4 +1,5 @@
 import {NormalizedIssueNote} from '../../src/Issues/issue-note';
+import {isIssueInternal} from '../../src/Classification/internal-identity';
 import {
 	buildIssueNotificationState,
 	findNewIssues,
@@ -7,6 +8,7 @@ import {
 	markFeishuIssuesDelivered,
 	normalizeIssueNotificationState,
 	queueFeishuIssueDeliveries,
+	removeInternalFeishuIssueDeliveries,
 } from '../../src/Notifications/new-issue-notifications';
 
 function makeIssue(overrides: Partial<NormalizedIssueNote> = {}): NormalizedIssueNote {
@@ -83,6 +85,50 @@ describe('new issue notifications', () => {
 				'CPF-KMP-CMP/repo-a#3',
 			],
 		});
+	});
+
+	it('uses the complete internal-Issue rule before adding title-only Issues to Feishu delivery', () => {
+		const titles = ['门禁测试', '【bug】 登录失败', '【fix】 修复', 'IR-23', 'SR 24', '【release】 发布', '【next】 下一步', '【需求】 内部需求'];
+		const titleOnlyIssues = titles.map((title, index) => makeIssue({
+			iid: index + 2,
+			title,
+			webUrl: `https://gitcode.com/CPF-KMP-CMP/repo-a/issues/${index + 2}`,
+			referencesFull: `CPF-KMP-CMP/repo-a#${index + 2}`,
+		}));
+		const isInternalIssue = (issue: NormalizedIssueNote) => isIssueInternal(issue, new Set());
+		const newIssues = findNewIssues(titleOnlyIssues, {seenIssueKeys: []}, isInternalIssue);
+		const queued = queueFeishuIssueDeliveries(
+			{seenIssueKeys: newIssues.map((issue) => issue.issueKey)},
+			newIssues,
+		);
+
+		expect(newIssues).toHaveLength(titles.length);
+		expect(newIssues).toEqual(expect.arrayContaining([
+			expect.objectContaining({title: '门禁测试', authorType: 'internal'}),
+			expect.objectContaining({title: '【bug】 登录失败', authorType: 'internal'}),
+			expect.objectContaining({title: 'IR-23', authorType: 'internal'}),
+			expect.objectContaining({title: 'SR 24', authorType: 'internal'}),
+		]));
+		expect(findPendingFeishuIssues(queued)).toEqual([]);
+	});
+
+	it('removes legacy pending deliveries that are now recognized by the complete internal-Issue rule', () => {
+		const titleOnlyIssue = makeIssue({
+			title: '门禁测试',
+			authorUsername: 'liaoyiming365',
+			authorName: 'liaoyiming',
+		});
+		const legacyPendingIssue = findNewIssues([titleOnlyIssue], {seenIssueKeys: []})[0];
+		const state = removeInternalFeishuIssueDeliveries({
+			seenIssueKeys: [legacyPendingIssue.issueKey],
+			feishuDelivery: {
+				pendingIssues: [legacyPendingIssue],
+				deliveries: {},
+			},
+		}, [titleOnlyIssue], (issue) => isIssueInternal(issue, new Set()));
+
+		expect(legacyPendingIssue.authorType).toBe('external');
+		expect(findPendingFeishuIssues(state)).toEqual([]);
 	});
 
 	it('normalizes malformed state conservatively', () => {

@@ -421,7 +421,7 @@ describe('SyncService', () => {
 		);
 	});
 
-	it('queues newly detected Issues for Feishu before returning them for delivery', async () => {
+		it('keeps a title-only internal Issue out of the Feishu delivery queue', async () => {
 		const settings = makeSettings({generateDailyReports: false, feishuWebhookUrl: 'https://example.test/hook'});
 		mockReadJson.mockImplementation(async (path: string) => (
 			path === 'GitCode Issues/meta/issue-notification-state.json'
@@ -432,8 +432,9 @@ describe('SyncService', () => {
 			makeIssue({iid: 79}),
 			makeIssue({
 				iid: 80,
+				title: '门禁测试',
 				author: {
-					avatar_url: '', id: 2, locked: false, name: 'Developer A', state: 'active', username: 'dev_a', web_url: '',
+					avatar_url: '', id: 2, locked: false, name: 'liaoyiming', state: 'active', username: 'liaoyiming365', web_url: '',
 				},
 				references: {short: '#80', relative: '#80', full: 'CPF-KMP-CMP/repo-a#80'},
 				web_url: 'https://gitcode.com/CPF-KMP-CMP/repo-a/issues/80',
@@ -442,6 +443,10 @@ describe('SyncService', () => {
 
 		const result = await new SyncService(mockApp, settings).run();
 
+		expect(result.newIssues).toEqual(expect.arrayContaining([
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#79', authorType: 'external'}),
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#80', title: '门禁测试', authorType: 'internal'}),
+		]));
 		expect(result.pendingFeishuIssues).toEqual([
 			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#79'}),
 		]);
@@ -459,15 +464,16 @@ describe('SyncService', () => {
 		);
 	});
 
-	it('tracks an unanswered internal Issue from creation and returns it after the configured delay', async () => {
+	it('tracks a title-only internal Issue from creation and returns it after the configured delay', async () => {
 		const settings = makeSettings({
 			generateDailyReports: false,
 			internalIssueAutoReplyEnabled: true,
 			internalIssueAutoReplyDelayHours: 24,
 		});
 		const internalIssue = makeIssue({
+			title: '门禁测试',
 			author: {
-				avatar_url: '', id: 2, locked: false, name: 'Developer A', state: 'active', username: 'dev_a', web_url: '',
+				avatar_url: '', id: 2, locked: false, name: 'liaoyiming', state: 'active', username: 'liaoyiming365', web_url: '',
 			},
 		});
 		let autoReplyState: unknown = null;

@@ -1,5 +1,6 @@
 import {NormalizedIssueNote} from '../Issues/issue-note';
 import {buildIssueKey, deduplicateIssues} from '../Issues/issue-scope';
+import {InternalIssuePredicate} from '../Classification/internal-identity';
 
 export type IssueAuthorType = 'internal' | 'external';
 
@@ -74,6 +75,7 @@ export function buildIssueNotificationState(
 export function findNewIssues(
 	issues: NormalizedIssueNote[],
 	previousState: IssueNotificationState | null,
+	isInternalIssue: InternalIssuePredicate = (issue) => issue.isInternalAuthor,
 ): NewIssue[] {
 	if (!previousState) {
 		return [];
@@ -82,7 +84,32 @@ export function findNewIssues(
 	const seenIssueKeys = new Set(previousState.seenIssueKeys);
 	return deduplicateIssues(issues)
 		.filter((issue) => !seenIssueKeys.has(buildIssueKey(issue)))
-		.map(toNewIssue);
+		.map((issue) => toNewIssue(issue, isInternalIssue));
+}
+
+export function removeInternalFeishuIssueDeliveries(
+	state: IssueNotificationState,
+	issues: NormalizedIssueNote[],
+	isInternalIssue: InternalIssuePredicate = (issue) => issue.isInternalAuthor,
+): IssueNotificationState {
+	if (!state.feishuDelivery) {
+		return state;
+	}
+
+	const internalIssueKeys = new Set(
+		deduplicateIssues(issues)
+			.filter(isInternalIssue)
+			.map(buildIssueKey),
+	);
+	return {
+		...state,
+		feishuDelivery: {
+			...state.feishuDelivery,
+			pendingIssues: state.feishuDelivery.pendingIssues.filter((issue) => (
+				isExternalIssue(issue) && !internalIssueKeys.has(issue.issueKey)
+			)),
+		},
+	};
 }
 
 export function queueFeishuIssueDeliveries(
@@ -147,7 +174,7 @@ export function formatNewIssueCounts(issues: NewIssue[]) {
 	return `内部 ${internalCount} / 外部 ${issues.length - internalCount}`;
 }
 
-function toNewIssue(issue: NormalizedIssueNote): NewIssue {
+function toNewIssue(issue: NormalizedIssueNote, isInternalIssue: InternalIssuePredicate): NewIssue {
 	return {
 		issueKey: buildIssueKey(issue),
 		sourceRepo: issue.sourceRepo,
@@ -157,7 +184,7 @@ function toNewIssue(issue: NormalizedIssueNote): NewIssue {
 		authorName: issue.authorName,
 		authorUsername: issue.authorUsername,
 		webUrl: issue.webUrl,
-		authorType: issue.isInternalAuthor ? 'internal' : 'external',
+		authorType: isInternalIssue(issue) ? 'internal' : 'external',
 	};
 }
 

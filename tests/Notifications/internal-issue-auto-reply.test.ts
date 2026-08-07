@@ -1,4 +1,5 @@
 import {NormalizedIssueNote} from '../../src/Issues/issue-note';
+import {isIssueInternal} from '../../src/Classification/internal-identity';
 import {
 	appendInternalIssueAutoReplyMarker,
 	buildInternalIssueAutoReplyBaseline,
@@ -100,6 +101,26 @@ describe('internal Issue auto-reply state', () => {
 		expect(queueInternalIssueAutoReplies(queued, [
 			{...issue, state: 'closed'},
 		])).toEqual(expect.objectContaining({pendingIssues: []}));
+	});
+
+	it('tracks a title-only internal Issue when it has no roster or collaborator match', () => {
+		const titleOnlyIssue = makeIssue({
+			title: '门禁测试',
+			authorUsername: 'liaoyiming365',
+			authorName: 'liaoyiming',
+			isInternalAuthor: false,
+			internalMatchedBy: 'none',
+		});
+		const isInternalIssue = (issue: NormalizedIssueNote) => isIssueInternal(issue, new Set());
+		const queued = queueInternalIssueAutoReplies(
+			buildInternalIssueAutoReplyBaseline([], '2026-08-06T01:00:00.000Z', 24, isInternalIssue),
+			[titleOnlyIssue],
+			isInternalIssue,
+		);
+
+		expect(queued.pendingIssues).toEqual([
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#1', title: '门禁测试'}),
+		]);
 	});
 
 	it('migrates current-week unanswered Issues without replaying older overdue history and preserves deliveries', () => {
