@@ -1,0 +1,30 @@
+CHANGELOG.md
+  s_6d6baab3d26be4::t_9e39dbb6e3b494 5-12
+manifest.json
+  s_6d6baab3d26be4::t_97118668793773 4
+package.json
+  s_6d6baab3d26be4::t_ab036b11929610 3
+tests/GitlabLoader/gitlab-loader.test.ts
+  s_6d6baab3d26be4::t_6eaa5e842dc7a4 202-226,242-267,269,272
+versions.json
+  s_6d6baab3d26be4::t_b47041b6344832 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "5.30.1",
+  "base_commit_sha": "6dcec9029dd096551e203d5690e9cb306b7b5f31",
+  "prompts": {},
+  "sessions": {
+    "s_6d6baab3d26be4": {
+      "agent_id": {
+        "tool": "workbuddy",
+        "id": "1f523427-87a8-436f-a89c-3fa044313051",
+        "model": "glm-5-3-260814"
+      },
+      "human_author": "EvElynn <yangming168@h-partners.com>",
+      "total_additions": 0,
+      "total_deletions": 0,
+      "overridden_lines": 0
+    }
+  }
+}
