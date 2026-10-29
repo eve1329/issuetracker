@@ -7,6 +7,7 @@ import {GitlabIssuesSettings} from "../SettingsTab/settings-types";
 import {detectGitHost, getGitlabApiVersion} from "../SettingsTab/settings";
 import {logger} from "../utils/utils";
 import {findFirstOtherPersonResponseAt} from '../Issues/first-response';
+import {isInternalIssueAutoReplyComment} from '../Notifications/internal-issue-auto-reply';
 
 export default class GitlabLoader {
 
@@ -157,15 +158,20 @@ export default class GitlabLoader {
 			this.settings.gitlabToken,
 		);
 
-		return findFirstOtherPersonResponseAt(issueAuthorUsername, comments.map((comment) => ({
-			authorUsername: comment.author?.username
-				?? comment.author?.login
-				?? comment.user?.login
-				?? comment.user?.username
-				?? '',
-			createdAt: comment.created_at ?? '',
-			isSystem: Boolean(comment.system),
-		})));
+		return findFirstOtherPersonResponseAt(issueAuthorUsername, comments
+			// Drop the plugin's own auto-reply: it is posted with our token account (not the
+			// Issue author), so counting it would report the bot's "已收到" as the first human
+			// response and mask real 48h+ responsiveness.
+			.filter((comment) => !isInternalIssueAutoReplyComment(comment.body ?? comment.note))
+			.map((comment) => ({
+				authorUsername: comment.author?.username
+					?? comment.author?.login
+					?? comment.user?.login
+					?? comment.user?.username
+					?? '',
+				createdAt: comment.created_at ?? '',
+				isSystem: Boolean(comment.system),
+			})));
 	}
 
 	async postIssueComment(repoName: string, issueIid: number, body: string): Promise<void> {
@@ -176,13 +182,31 @@ export default class GitlabLoader {
 		);
 	}
 
-	async hasIssueCommentContaining(repoName: string, issueIid: number, marker: string): Promise<boolean> {
+	/**
+	 * Live pre-post gate for the internal auto-reply: true when anyone other than the Issue
+	 * author has already commented (a previous auto-reply marker comment or a real human
+	 * response). The locally persisted first-response value can be stale when a comment
+	 * backfill was rate-limited, so the delivery decision must be re-verified against the API.
+	 */
+	async hasOtherPersonComment(repoName: string, issueIid: number, issueAuthorUsername: string): Promise<boolean> {
 		const comments = await GitlabApi.loadAllPages<IssueComment>(
 			this.getIssueCommentsUrl(repoName, issueIid),
 			this.settings.gitlabToken,
 		);
 
-		return comments.some((comment) => (comment.body ?? comment.note ?? '').includes(marker));
+		const authorUsername = issueAuthorUsername.trim().toLowerCase();
+		return comments.some((comment) => {
+			const commenterUsername = (
+				comment.author?.username
+				?? comment.author?.login
+				?? comment.user?.login
+				?? comment.user?.username
+				?? ''
+			).trim().toLowerCase();
+			return !comment.system
+				&& Boolean(commenterUsername)
+				&& commenterUsername !== authorUsername;
+		});
 	}
 
 	async loadOrgRepos(): Promise<GitCodeOrgRepository[]> {

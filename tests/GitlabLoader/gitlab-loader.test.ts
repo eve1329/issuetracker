@@ -199,6 +199,31 @@ describe('GitlabLoader', () => {
 		);
 	});
 
+	it('ignores the plugin auto-reply comment when computing the first response', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockLoadAllPages.mockResolvedValueOnce([
+			// The bot's own "已收到" reply is posted with our token account (not the author),
+			// so it must be excluded or it would mask a slow human first response.
+			{created_at: '2026-06-17T09:20:00+08:00', author: {username: 'vin_chen'}, body: '已收到，感谢反馈，我们会尽快跟进。\n\n<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->'},
+			{created_at: '2026-06-17T09:45:00+08:00', author: {username: 'reviewer_b'}, body: 'looking into this'},
+		]);
+
+		await expect(gitlabLoader.loadFirstOtherPersonResponseAt('docs', 16, 'partner_a')).resolves.toBe(
+			'2026-06-17T09:45:00+08:00',
+		);
+	});
+
+	it('returns an empty first response when only the plugin auto-reply exists', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockLoadAllPages.mockResolvedValueOnce([
+			{created_at: '2026-06-17T09:20:00+08:00', author: {username: 'vin_chen'}, body: '已收到\n\n<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->'},
+		]);
+
+		await expect(gitlabLoader.loadFirstOtherPersonResponseAt('docs', 16, 'partner_a')).resolves.toBe('');
+	});
+
 	it('posts a comment to the repository Issue comments endpoint', async () => {
 		const mockCreate = jest.spyOn(GitlabApi, 'create').mockResolvedValue(undefined);
 		mockSettings.gitlabUrl = 'https://gitcode.com';
@@ -214,16 +239,37 @@ describe('GitlabLoader', () => {
 		mockCreate.mockRestore();
 	});
 
-	it('detects an existing auto-reply marker in Issue comments', async () => {
+	it('detects an existing auto-reply or human comment before posting', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
 		mockLoadAllPages.mockResolvedValueOnce([
-			{body: '<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->'},
+			{body: '<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->', author: {username: 'vin_chen'}},
 		]);
 
-		await expect(gitlabLoader.hasIssueCommentContaining(
-			'docs',
-			16,
-			'<!-- issuetracker-auto-reply:CPF-KMP-CMP/docs#16 -->',
-		)).resolves.toBe(true);
+		// A prior auto-reply (posted by our own token account, not the author) counts as an
+		// other-person comment so we never double-post.
+		await expect(gitlabLoader.hasOtherPersonComment('docs', 16, 'partner_a')).resolves.toBe(true);
+	});
+
+	it('reports no other-person comment when only the author and system notes exist', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockLoadAllPages.mockResolvedValueOnce([
+			{body: 'my own update', author: {username: 'Partner_A'}},
+			{body: 'label changed', author: {username: 'system'}, system: true},
+		]);
+
+		await expect(gitlabLoader.hasOtherPersonComment('docs', 16, 'partner_a')).resolves.toBe(false);
+	});
+
+	it('detects a human response from another account', async () => {
+		mockSettings.gitlabUrl = 'https://gitcode.com';
+		mockSettings.apiBaseUrl = 'https://gitcode.com/api/v5';
+		mockLoadAllPages.mockResolvedValueOnce([
+			{body: 'we will fix this', author: {username: 'reviewer_b'}},
+		]);
+
+		await expect(gitlabLoader.hasOtherPersonComment('docs', 16, 'partner_a')).resolves.toBe(true);
 	});
 
 	it('loads repo issues with the GitHub repository endpoint when configured against GitHub', async () => {

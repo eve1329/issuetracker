@@ -86,6 +86,11 @@ interface FirstResponseLoadResult {
 export default class SyncService {
 	private static readonly RECENT_REPORT_REPAIR_DAYS = 7;
 	private static readonly FIRST_RESPONSE_CONCURRENCY = 4;
+	// An unanswered open Issue is only re-checked when it has new activity since the last
+	// check, or when the last check is older than this. Without the cap GitCode's updated_at
+	// could hide a late response forever; without the activity gate every sync would re-fetch
+	// comments for the whole unanswered backlog and trip the per-minute rate limit.
+	private static readonly FIRST_RESPONSE_STALE_MS = 24 * 60 * 60 * 1000;
 
 	private readonly fs: Filesystem;
 	private readonly loader: GitlabLoader;
@@ -186,12 +191,13 @@ export default class SyncService {
 			? new Set(Object.keys(previousLedgerState?.serialByIssueKey ?? {}))
 			: new Set<string>();
 		const firstResponseCandidates: FirstResponseCandidate[] = [];
+		const syncTimeMs = Date.parse(syncTime);
 		for (const {repoName, issues} of repoIssueBatches) {
 			for (const issue of issues) {
 				const note = this.normalizeIssue(issue, repoName, internalMembers, existingNotesByKey);
 				const existingNote = existingNotesByKey.get(this.buildIssueKey(note.sourceRepo, note.iid));
 				normalizedNotes.push(note);
-				if (this.shouldLoadFirstResponse(note, existingNote, previousTrackedIssueKeys, startMonth)) {
+				if (this.shouldLoadFirstResponse(note, existingNote, previousTrackedIssueKeys, startMonth, syncTimeMs)) {
 					firstResponseCandidates.push({
 						repoName,
 						note,
@@ -381,6 +387,17 @@ export default class SyncService {
 			|| repositorySyncStatus === 'degraded'
 			? 'degraded'
 			: 'success';
+		// New-Issue notifications and the internal auto-reply safety net depend only on the
+		// core inputs: member classification, a complete Issue list, and durable Issue notes.
+		// A rate-limited first-response comment backfill (or a report/ledger write failure)
+		// must NOT disable them — that is exactly what starved the auto-reply for weeks while
+		// responses were slow, because the backfill burst tripped GitCode's 429 limit and the
+		// resulting 'degraded' status gated the safety net off. Posting is separately guarded
+		// by a live comment re-check (hasOtherPersonComment) so a stale first-response value
+		// can never cause a duplicate or wrong auto-reply.
+		const downstreamHealthy = memberSyncStatus !== 'degraded'
+			&& failedRepos.length === 0
+			&& !issueStorageFailed;
 		let newIssues: NewIssue[] = [];
 		let pendingFeishuIssues: NewIssue[] = [];
 		let pendingInternalAutoReplyIssues: InternalIssueAutoReplyCandidate[] = [];
@@ -389,7 +406,7 @@ export default class SyncService {
 		const autoReplyStatePath = `${this.settings.metaFolder}/internal-issue-auto-reply-state.json`;
 		let nextInternalAutoReplyState: InternalIssueAutoReplyState | null = null;
 
-		if (syncStatus === 'success') {
+		if (downstreamHealthy) {
 			try {
 				const previousNotificationState = normalizeIssueNotificationState(
 					await this.fs.readJson<unknown>(notificationStatePath),
@@ -418,7 +435,7 @@ export default class SyncService {
 			}
 		}
 
-		if (syncStatus === 'success' && this.settings.internalIssueAutoReplyEnabled) {
+		if (downstreamHealthy && this.settings.internalIssueAutoReplyEnabled) {
 			try {
 				const previousAutoReplyState = normalizeInternalIssueAutoReplyState(
 					await this.fs.readJson<unknown>(autoReplyStatePath),
@@ -476,7 +493,7 @@ export default class SyncService {
 
 		// The final sync marker must be durable before an Issue is marked as notified.
 		await writeSyncState();
-		if (syncStatus === 'success' && nextNotificationState) {
+		if (downstreamHealthy && nextNotificationState) {
 			try {
 				await this.fs.writeJson(notificationStatePath, nextNotificationState);
 			} catch (error) {
@@ -489,7 +506,7 @@ export default class SyncService {
 				await writeSyncState();
 			}
 		}
-		if (syncStatus === 'success' && nextInternalAutoReplyState) {
+		if (downstreamHealthy && nextInternalAutoReplyState) {
 			try {
 				await this.fs.writeJson(autoReplyStatePath, nextInternalAutoReplyState);
 			} catch (error) {
@@ -513,7 +530,7 @@ export default class SyncService {
 		);
 
 		const result: SyncRunResult = {syncStatus, ledgerWriteFailed, newIssues, pendingFeishuIssues};
-		if (this.settings.internalIssueAutoReplyEnabled && syncStatus === 'success' && nextInternalAutoReplyState) {
+		if (this.settings.internalIssueAutoReplyEnabled && downstreamHealthy && nextInternalAutoReplyState) {
 			result.pendingInternalAutoReplyIssues = pendingInternalAutoReplyIssues;
 		}
 		return result;
@@ -536,6 +553,7 @@ export default class SyncService {
 		existingNote: NormalizedIssueNote | undefined,
 		previouslyTrackedIssueKeys: Set<string>,
 		startMonth: string,
+		nowMs: number,
 	) {
 		if (!isOnOrAfterStartMonth(note, startMonth)) {
 			return false;
@@ -544,7 +562,10 @@ export default class SyncService {
 		const issueKey = buildIssueKey(note);
 		const isClosed = note.state.trim().toLowerCase() === 'closed';
 		if (!isClosed) {
-			return !note.firstResponseAt.trim();
+			if (note.firstResponseAt.trim()) {
+				return false;
+			}
+			return this.shouldRecheckUnansweredIssue(note, nowMs);
 		}
 
 		if (!previouslyTrackedIssueKeys.has(issueKey)) {
@@ -553,6 +574,23 @@ export default class SyncService {
 
 		const wasOpen = existingNote && ['open', 'opened'].includes(existingNote.state.trim().toLowerCase());
 		return Boolean(wasOpen) || (!note.firstResponseAt.trim() && !note.firstResponseCheckedAt.trim());
+	}
+
+	// Re-fetch comments for a still-unanswered open Issue only when it changed since the last
+	// check or that check went stale; this keeps the per-sync comment budget small enough to
+	// stay under GitCode's 50-requests/min limit instead of bursting the whole backlog.
+	private shouldRecheckUnansweredIssue(note: NormalizedIssueNote, nowMs: number): boolean {
+		const checkedAtMs = Date.parse(note.firstResponseCheckedAt);
+		if (!Number.isFinite(checkedAtMs)) {
+			return true;
+		}
+
+		const updatedAtMs = Date.parse(note.updatedAt);
+		if (Number.isFinite(updatedAtMs) && updatedAtMs > checkedAtMs) {
+			return true;
+		}
+
+		return nowMs - checkedAtMs >= SyncService.FIRST_RESPONSE_STALE_MS;
 	}
 
 	private buildPreExcelLedgerState(

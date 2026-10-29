@@ -15,7 +15,6 @@ import {
 } from './Notifications/new-issue-notifications';
 import {
 	appendInternalIssueAutoReplyMarker,
-	buildInternalIssueAutoReplyMarker,
 	formatInternalIssueAutoReply,
 	markInternalIssueAutoRepliesDelivered,
 	normalizeInternalIssueAutoReplyState,
@@ -239,8 +238,10 @@ export default class GitlabIssuesPlugin extends Plugin {
 		for (const issue of issues) {
 			try {
 				const body = formatInternalIssueAutoReply(this.settings.internalIssueAutoReplyTemplate, issue);
-				const marker = buildInternalIssueAutoReplyMarker(issue.issueKey);
-				if (!await loader.hasIssueCommentContaining(issue.sourceRepo, issue.iid, marker)) {
+				// Re-verify against the live API: the persisted first-response value can be stale
+				// when a comment backfill was rate-limited, and we must never reply on top of an
+				// existing human answer or a previous auto-reply.
+				if (!await loader.hasOtherPersonComment(issue.sourceRepo, issue.iid, issue.authorUsername)) {
 					await loader.postIssueComment(
 						issue.sourceRepo,
 						issue.iid,

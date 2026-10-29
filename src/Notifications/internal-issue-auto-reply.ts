@@ -5,9 +5,19 @@ import {InternalIssuePredicate} from '../Classification/internal-identity';
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_TEMPLATE = '已收到，感谢反馈，我们会尽快跟进。';
 export const DEFAULT_INTERNAL_ISSUE_AUTO_REPLY_DELAY_HOURS = 24;
 export const INTERNAL_ISSUE_AUTO_REPLY_TRACKING_VERSION = 2;
+const INTERNAL_ISSUE_AUTO_REPLY_MARKER_PREFIX = '<!-- issuetracker-auto-reply:';
 
 export function buildInternalIssueAutoReplyMarker(issueKey: string) {
-	return `<!-- issuetracker-auto-reply:${issueKey} -->`;
+	return `${INTERNAL_ISSUE_AUTO_REPLY_MARKER_PREFIX}${issueKey} -->`;
+}
+
+/**
+ * The auto-reply is posted with the plugin's own token account, which is not the Issue
+ * author, so without this guard the bot's "已收到" comment would be counted as the first
+ * human response and hide real 48h+ responsiveness. Callers use this to drop bot comments.
+ */
+export function isInternalIssueAutoReplyComment(body: string | null | undefined): boolean {
+	return (body ?? '').includes(INTERNAL_ISSUE_AUTO_REPLY_MARKER_PREFIX);
 }
 
 export function appendInternalIssueAutoReplyMarker(body: string, issueKey: string) {

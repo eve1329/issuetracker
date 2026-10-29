@@ -515,6 +515,69 @@ describe('SyncService', () => {
 		);
 	});
 
+	it('still returns due internal auto-replies and notifications when the first-response backfill is rate-limited', async () => {
+		const settings = makeSettings({
+			generateDailyReports: false,
+			internalIssueAutoReplyEnabled: true,
+			internalIssueAutoReplyDelayHours: 0,
+		});
+		const internalIssue = makeIssue({
+			title: '门禁测试',
+			author: {
+				avatar_url: '', id: 2, locked: false, name: 'liaoyiming', state: 'active', username: 'liaoyiming365', web_url: '',
+			},
+		});
+		mockReadJson.mockImplementation(async (path: string) => {
+			if (path === 'GitCode Issues/meta/issue-notification-state.json') {
+				return {seenIssueKeys: []};
+			}
+			if (path === 'GitCode Issues/meta/internal-issue-auto-reply-state.json') {
+				return {
+					trackingVersion: 2,
+					initialized: true,
+					observedUnansweredIssueKeys: [],
+					pendingIssues: [],
+					deliveries: {},
+				};
+			}
+			return null;
+		});
+		mockLoadRepoIssues.mockResolvedValueOnce([internalIssue]);
+		// Simulate a GitCode 429 while backfilling the first-response comments.
+		mockLoadFirstOtherPersonResponseAt.mockRejectedValue(
+			new Error('429 The number of times the user invokes this API is too large.'),
+		);
+
+		const result = await new SyncService(mockApp, settings).run();
+
+		// The comment backfill failed, so the sync still reports degraded for visibility...
+		expect(result.syncStatus).toBe('degraded');
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/sync-state.json',
+			expect.objectContaining({
+				warningMessages: expect.arrayContaining([
+					expect.stringContaining('Failed to load first responses for 1 Issue(s)'),
+				]),
+			}),
+		);
+		// ...but a rate-limited backfill must NOT starve the safety nets: the due internal
+		// auto-reply is still returned (posting re-verifies live) and notifications survive.
+		expect(result.pendingInternalAutoReplyIssues).toEqual([
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#78'}),
+		]);
+		expect(result.newIssues).toEqual(expect.arrayContaining([
+			expect.objectContaining({issueKey: 'CPF-KMP-CMP/repo-a#78'}),
+		]));
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/internal-issue-auto-reply-state.json',
+			expect.objectContaining({initialized: true}),
+		);
+		expect(mockWriteJson).toHaveBeenCalledWith(
+			'GitCode Issues/meta/issue-notification-state.json',
+			expect.anything(),
+		);
+	});
+
 	it('does not return notifications when their durable state cannot be written', async () => {
 		const settings = makeSettings({generateDailyReports: false});
 		mockReadJson.mockImplementation(async (path: string) => (
@@ -593,6 +656,54 @@ describe('SyncService', () => {
 			}),
 			expect.objectContaining({iid: 79}),
 		]);
+	});
+
+	it('skips the comment re-check for an unanswered open Issue with no activity since a recent check', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		const existingNote = makePersistedIssueNote({
+			state: 'opened',
+			firstResponseAt: '',
+			firstResponseCheckedAt: '2026-06-17T11:30:00.000Z', // 30 min before now, no new activity
+		});
+		mockReadIssueNotes.mockResolvedValue([existingNote]);
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({state: 'opened', updated_at: '2026-06-17T10:05:00.000Z'})]);
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockLoadFirstOtherPersonResponseAt).not.toHaveBeenCalled();
+	});
+
+	it('re-checks an unanswered open Issue when it has new activity since the last check', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		const existingNote = makePersistedIssueNote({
+			state: 'opened',
+			firstResponseAt: '',
+			firstResponseCheckedAt: '2026-06-17T11:00:00.000Z',
+		});
+		mockReadIssueNotes.mockResolvedValue([existingNote]);
+		// updated_at 19:30+08:00 == 11:30Z, newer than the 11:00Z last check.
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({state: 'opened', updated_at: '2026-06-17T19:30:00+08:00'})]);
+		mockLoadFirstOtherPersonResponseAt.mockResolvedValueOnce('');
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockLoadFirstOtherPersonResponseAt).toHaveBeenCalledWith('repo-a', 78, 'partner_a');
+	});
+
+	it('re-checks an unanswered open Issue when the last check is older than a day even without activity', async () => {
+		const settings = makeSettings({generateDailyReports: false});
+		const existingNote = makePersistedIssueNote({
+			state: 'opened',
+			firstResponseAt: '',
+			firstResponseCheckedAt: '2026-06-16T11:00:00.000Z', // 25h before now
+		});
+		mockReadIssueNotes.mockResolvedValue([existingNote]);
+		mockLoadRepoIssues.mockResolvedValueOnce([makeIssue({state: 'opened', updated_at: '2026-06-16T10:00:00.000Z'})]);
+		mockLoadFirstOtherPersonResponseAt.mockResolvedValueOnce('');
+
+		await new SyncService(mockApp, settings).run();
+
+		expect(mockLoadFirstOtherPersonResponseAt).toHaveBeenCalledWith('repo-a', 78, 'partner_a');
 	});
 
 	it('skips comment requests for a first-seen historical closed Issue', async () => {

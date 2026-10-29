@@ -15,6 +15,13 @@ describe('GitlabApi', () => {
 
 	afterEach(() => {
 		jest.clearAllMocks();
+		GitlabApi.restoreRateLimitDefaults();
+	});
+
+	beforeEach(() => {
+		// Disable pacing by default so existing cases do not incur real delays; the
+		// rate-limit tests below re-enable it with an injected sleep/clock.
+		GitlabApi.configureRateLimit({requestsPerMinute: 0});
 	});
 
 	it('should load data successfully', async () => {
@@ -240,6 +247,97 @@ describe('GitlabApi', () => {
 				Authorization: `token ${mockToken}`,
 			},
 			throw: false,
+		});
+	});
+
+	describe('rate limiting', () => {
+		const okResponse = (json: unknown) => ({
+			status: 200,
+			headers: {},
+			json: Promise.resolve(json),
+			text: '',
+		} as unknown as RequestUrlResponse);
+
+		it('retries a 429 with backoff and resolves once the host recovers', async () => {
+			const sleep = jest.fn().mockResolvedValue(undefined);
+			GitlabApi.configureRateLimit({requestsPerMinute: 0, maxRetries: 3, baseRetryDelayMs: 1000, sleep});
+			mockRequestUrl
+				.mockResolvedValueOnce({status: 429, headers: {}, json: Promise.resolve(null), text: 'Too Many Requests'} as unknown as RequestUrlResponse)
+				.mockResolvedValueOnce({status: 429, headers: {}, json: Promise.resolve(null), text: 'Too Many Requests'} as unknown as RequestUrlResponse)
+				.mockResolvedValueOnce(okResponse([{id: 1}]));
+
+			await expect(GitlabApi.load(mockUrl, mockToken)).resolves.toEqual([{id: 1}]);
+			expect(mockRequestUrl).toHaveBeenCalledTimes(3);
+			// Exponential backoff: 1000ms then 2000ms.
+			expect(sleep).toHaveBeenNthCalledWith(1, 1000);
+			expect(sleep).toHaveBeenNthCalledWith(2, 2000);
+		});
+
+		it('honors the Retry-After header when present', async () => {
+			const sleep = jest.fn().mockResolvedValue(undefined);
+			GitlabApi.configureRateLimit({requestsPerMinute: 0, maxRetries: 2, baseRetryDelayMs: 1000, sleep});
+			mockRequestUrl
+				.mockResolvedValueOnce({status: 429, headers: {'retry-after': '7'}, json: Promise.resolve(null), text: 'slow down'} as unknown as RequestUrlResponse)
+				.mockResolvedValueOnce(okResponse([]));
+
+			await expect(GitlabApi.load(mockUrl, mockToken)).resolves.toEqual([]);
+			expect(sleep).toHaveBeenCalledWith(7000);
+		});
+
+		it('gives up and surfaces the error after exhausting retries', async () => {
+			const sleep = jest.fn().mockResolvedValue(undefined);
+			GitlabApi.configureRateLimit({requestsPerMinute: 0, maxRetries: 2, baseRetryDelayMs: 10, sleep});
+			mockRequestUrl.mockResolvedValue({status: 429, headers: {}, json: Promise.resolve(null), text: 'rate limited'} as unknown as RequestUrlResponse);
+
+			await expect(GitlabApi.load(mockUrl, mockToken)).rejects.toThrow('rate limited');
+			// 1 initial + 2 retries.
+			expect(mockRequestUrl).toHaveBeenCalledTimes(3);
+		});
+
+		it('retries 5xx on reads but not on comment writes', async () => {
+			const sleep = jest.fn().mockResolvedValue(undefined);
+			GitlabApi.configureRateLimit({requestsPerMinute: 0, maxRetries: 2, baseRetryDelayMs: 10, sleep});
+
+			mockRequestUrl
+				.mockResolvedValueOnce({status: 503, headers: {}, json: Promise.resolve(null), text: 'unavailable'} as unknown as RequestUrlResponse)
+				.mockResolvedValueOnce(okResponse([{id: 9}]));
+			await expect(GitlabApi.load(mockUrl, mockToken)).resolves.toEqual([{id: 9}]);
+			expect(mockRequestUrl).toHaveBeenCalledTimes(2);
+
+			mockRequestUrl.mockClear();
+			mockRequestUrl.mockResolvedValue({status: 503, headers: {}, json: Promise.resolve(null), text: 'unavailable'} as unknown as RequestUrlResponse);
+			await expect(GitlabApi.create(mockUrl, mockToken, {body: 'x'})).rejects.toThrow('unavailable');
+			// A write must not be retried on 5xx: the comment may already have been posted.
+			expect(mockRequestUrl).toHaveBeenCalledTimes(1);
+		});
+
+		it('fails a hung request instead of freezing the whole sync', async () => {
+			const sleep = jest.fn().mockResolvedValue(undefined);
+			GitlabApi.configureRateLimit({requestsPerMinute: 0, requestTimeoutMs: 25, sleep});
+			mockRequestUrl.mockReturnValue(new Promise(() => {}) as never);
+
+			await expect(GitlabApi.load(mockUrl, mockToken)).rejects.toThrow('timed out after 25ms');
+			// 1 initial attempt + maxRetries fresh-connection retries, then surface the error.
+			expect(mockRequestUrl).toHaveBeenCalledTimes(5);
+		});
+
+		it('paces requests to stay under the per-minute budget', async () => {
+			let nowMs = 0;
+			const slept: number[] = [];
+			GitlabApi.configureRateLimit({
+				requestsPerMinute: 60, // one slot per 1000ms
+				sleep: async (ms: number) => { slept.push(ms); nowMs += ms; },
+				now: () => nowMs,
+			});
+			mockRequestUrl.mockResolvedValue(okResponse([]));
+
+			await GitlabApi.load(mockUrl, mockToken);
+			await GitlabApi.load(mockUrl, mockToken);
+			await GitlabApi.load(mockUrl, mockToken);
+
+			// First request is immediate; subsequent ones wait for the next 1000ms slot.
+			expect(slept).toEqual([1000, 1000]);
+			expect(mockRequestUrl).toHaveBeenCalledTimes(3);
 		});
 	});
 });

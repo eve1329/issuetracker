@@ -2,6 +2,14 @@
 
 All notable changes to this local IssueTracker fork are documented in this file.
 
+## 0.2.16 - 2026-10-29
+
+- Pace all Git host API requests (~40/min) and retry HTTP 429 with exponential backoff (honoring `Retry-After`) so the first-response comment backfill no longer bursts past GitCode's 50-requests/min limit and fails wholesale. Reads also retry transient 5xx; comment writes never retry 5xx to avoid duplicate posts.
+- Re-check comments for unanswered open Issues only when the Issue has new activity since the last check or the last check is older than 24 hours, keeping each sync far below the API budget.
+- Keep new-Issue notifications and internal auto-replies running when only the first-response backfill fails; they remain gated on member classification, a complete Issue list, and durable Issue notes. This ends the weeks-long outage where a rate-limited backfill marked the sync degraded and silently starved the auto-reply safety net.
+- Re-verify live comments before posting an internal auto-reply (`hasOtherPersonComment`) so a stale local first-response value can never cause a duplicate or wrong reply.
+- Exclude the plugin's own auto-reply comments from first-response statistics so the ledger measures human responsiveness instead of the bot's acknowledgment.
+
 ## 0.2.15 - 2026-08-07
 
 - Use the complete internal-Issue decision for new-Issue notifications and internal auto-replies. Titles matching `IR` / `SR` or internal workflow markers such as `门禁测试` and `【bug】` are therefore excluded from Feishu even when the author is not yet in the member directory or whitelist; matching legacy pending deliveries are removed on the next successful sync.
